@@ -8,7 +8,7 @@ interface PlateHeatmapProps {
   wellsPerBlockRow?: number;
   wellsPerBlockCol?: number;
   blockGapWells?: number;
-  activeBlocks?: number[]; // Which blocks to render (by snake-order index)
+  activeBlocks?: number[];
   width?: number;
   height?: number;
 }
@@ -38,7 +38,6 @@ function valueToColor(value: number, min: number, max: number): [number, number,
   ];
 }
 
-// Convert block index (snake order) to grid position
 function blockIndexToPosition(index: number, blockRows: number): { row: number; col: number } {
   const col = Math.floor(index / blockRows);
   const rowInCol = index % blockRows;
@@ -47,14 +46,12 @@ function blockIndexToPosition(index: number, blockRows: number): { row: number; 
   return { row, col };
 }
 
-// Convert grid position to block index (snake order)
 function positionToBlockIndex(row: number, col: number, blockRows: number): number {
   const colGoingDown = col % 2 === 0;
   const rowInCol = colGoingDown ? row : blockRows - 1 - row;
   return col * blockRows + rowInCol;
 }
 
-// Build well map for a specific block
 function buildBlockWellMap(
   blockIndex: number,
   blockRows: number,
@@ -101,7 +98,12 @@ export function PlateHeatmap({
     y: number;
   } | null>(null);
 
-  // Default to all blocks if not specified
+  // Zoom and pan state
+  const [zoom, setZoom] = useState(1);
+  const [pan, setPan] = useState({ x: 0, y: 0 });
+  const [isDragging, setIsDragging] = useState(false);
+  const dragStartRef = useRef({ x: 0, y: 0, panX: 0, panY: 0 });
+
   const activeBlockSet = useMemo(() => {
     if (!activeBlocks) {
       return new Set(Array.from({ length: blockRows * blockCols }, (_, i) => i));
@@ -109,7 +111,6 @@ export function PlateHeatmap({
     return new Set(activeBlocks);
   }, [activeBlocks, blockRows, blockCols]);
 
-  // Build well maps for each active block
   const blockWellMaps = useMemo(() => {
     const maps = new Map<number, Map<string, number>>();
     for (const blockIndex of activeBlockSet) {
@@ -118,7 +119,6 @@ export function PlateHeatmap({
     return maps;
   }, [activeBlockSet, blockRows, wellsPerBlockRow, wellsPerBlockCol]);
 
-  // Calculate dimensions accounting for gaps
   const totalWellsX = blockCols * wellsPerBlockCol + (blockCols - 1) * blockGapWells;
   const totalWellsY = blockRows * wellsPerBlockRow + (blockRows - 1) * blockGapWells;
   const cellWidth = width / totalWellsX;
@@ -136,13 +136,16 @@ export function PlateHeatmap({
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
 
-    // Get min/max from data
     const min = data.length > 0 ? Math.min(...data) : 0;
     const max = data.length > 0 ? Math.max(...data) : 1;
 
-    // Clear canvas
+    // Clear and apply transform
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
     ctx.fillStyle = '#1a1a1a';
     ctx.fillRect(0, 0, width, height);
+
+    // Apply zoom and pan
+    ctx.setTransform(zoom, 0, 0, zoom, pan.x, pan.y);
 
     // Draw only active blocks
     for (const blockIndex of activeBlockSet) {
@@ -171,15 +174,40 @@ export function PlateHeatmap({
         }
       }
     }
-  }, [data, width, height, activeBlockSet, blockWellMaps, blockRows, wellsPerBlockRow, wellsPerBlockCol, cellWidth, cellHeight, blockPixelWidth, blockPixelHeight, gapWidth, gapHeight]);
+
+    // Reset transform
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+  }, [data, width, height, activeBlockSet, blockWellMaps, blockRows, wellsPerBlockRow, wellsPerBlockCol, cellWidth, cellHeight, blockPixelWidth, blockPixelHeight, gapWidth, gapHeight, zoom, pan]);
+
+  // Convert screen coordinates to canvas coordinates
+  const screenToCanvas = useCallback((screenX: number, screenY: number) => {
+    return {
+      x: (screenX - pan.x) / zoom,
+      y: (screenY - pan.y) / zoom,
+    };
+  }, [zoom, pan]);
 
   const handleMouseMove = useCallback((e: React.MouseEvent<HTMLCanvasElement>) => {
     const canvas = canvasRef.current;
     if (!canvas) return;
 
+    // Handle dragging for pan
+    if (isDragging) {
+      const dx = e.clientX - dragStartRef.current.x;
+      const dy = e.clientY - dragStartRef.current.y;
+      setPan({
+        x: dragStartRef.current.panX + dx,
+        y: dragStartRef.current.panY + dy,
+      });
+      return;
+    }
+
     const rect = canvas.getBoundingClientRect();
-    const x = e.clientX - rect.left;
-    const y = e.clientY - rect.top;
+    const screenX = e.clientX - rect.left;
+    const screenY = e.clientY - rect.top;
+
+    // Convert to canvas coordinates
+    const { x, y } = screenToCanvas(screenX, screenY);
 
     const blockStepX = blockPixelWidth + gapWidth;
     const blockStepY = blockPixelHeight + gapHeight;
@@ -192,7 +220,6 @@ export function PlateHeatmap({
       return;
     }
 
-    // Check if this block is active
     const blockIndex = positionToBlockIndex(blockRow, blockCol, blockRows);
     if (!activeBlockSet.has(blockIndex)) {
       setTooltip(null);
@@ -235,10 +262,57 @@ export function PlateHeatmap({
       x: e.clientX,
       y: e.clientY,
     });
-  }, [cellWidth, cellHeight, blockPixelWidth, blockPixelHeight, gapWidth, gapHeight, blockRows, blockCols, wellsPerBlockRow, wellsPerBlockCol, activeBlockSet, blockWellMaps, data]);
+  }, [cellWidth, cellHeight, blockPixelWidth, blockPixelHeight, gapWidth, gapHeight, blockRows, blockCols, wellsPerBlockRow, wellsPerBlockCol, activeBlockSet, blockWellMaps, data, isDragging, screenToCanvas]);
 
   const handleMouseLeave = useCallback(() => {
     setTooltip(null);
+    setIsDragging(false);
+  }, []);
+
+  const handleWheel = useCallback((e: React.WheelEvent<HTMLCanvasElement>) => {
+    e.preventDefault();
+
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+
+    const rect = canvas.getBoundingClientRect();
+    const mouseX = e.clientX - rect.left;
+    const mouseY = e.clientY - rect.top;
+
+    // Zoom factor
+    const zoomFactor = e.deltaY < 0 ? 1.1 : 0.9;
+    const newZoom = Math.min(Math.max(zoom * zoomFactor, 0.5), 10);
+
+    // Adjust pan to zoom toward mouse position
+    const canvasX = (mouseX - pan.x) / zoom;
+    const canvasY = (mouseY - pan.y) / zoom;
+
+    const newPanX = mouseX - canvasX * newZoom;
+    const newPanY = mouseY - canvasY * newZoom;
+
+    setZoom(newZoom);
+    setPan({ x: newPanX, y: newPanY });
+  }, [zoom, pan]);
+
+  const handleMouseDown = useCallback((e: React.MouseEvent<HTMLCanvasElement>) => {
+    if (e.button === 0) { // Left click
+      setIsDragging(true);
+      dragStartRef.current = {
+        x: e.clientX,
+        y: e.clientY,
+        panX: pan.x,
+        panY: pan.y,
+      };
+    }
+  }, [pan]);
+
+  const handleMouseUp = useCallback(() => {
+    setIsDragging(false);
+  }, []);
+
+  const handleReset = useCallback(() => {
+    setZoom(1);
+    setPan({ x: 0, y: 0 });
   }, []);
 
   const min = data.length > 0 ? Math.min(...data) : 0;
@@ -246,16 +320,26 @@ export function PlateHeatmap({
 
   return (
     <div className="plate-heatmap-container">
+      <div className="zoom-controls">
+        <span className="zoom-level">{Math.round(zoom * 100)}%</span>
+        <button onClick={() => setZoom(z => Math.min(z * 1.2, 10))}>+</button>
+        <button onClick={() => setZoom(z => Math.max(z / 1.2, 0.5))}>-</button>
+        <button onClick={handleReset}>Reset</button>
+      </div>
+
       <canvas
         ref={canvasRef}
         width={width}
         height={height}
-        className="plate-heatmap-canvas"
+        className={`plate-heatmap-canvas ${isDragging ? 'dragging' : ''}`}
         onMouseMove={handleMouseMove}
         onMouseLeave={handleMouseLeave}
+        onWheel={handleWheel}
+        onMouseDown={handleMouseDown}
+        onMouseUp={handleMouseUp}
       />
 
-      {tooltip && (
+      {tooltip && !isDragging && (
         <div
           className="tooltip"
           style={{

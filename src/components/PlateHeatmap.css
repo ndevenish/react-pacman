@@ -11,6 +11,38 @@
   cursor: crosshair;
 }
 
+.plate-heatmap-canvas.dragging {
+  cursor: grabbing;
+}
+
+.zoom-controls {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.zoom-controls button {
+  padding: 6px 12px;
+  font-size: 14px;
+  background: #333;
+  color: #fff;
+  border: 1px solid #555;
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+.zoom-controls button:hover {
+  background: #444;
+  border-color: #666;
+}
+
+.zoom-level {
+  min-width: 50px;
+  text-align: center;
+  font-size: 14px;
+  color: #aaa;
+}
+
 .tooltip {
   position: fixed;
   background: rgba(0, 0, 0, 0.9);

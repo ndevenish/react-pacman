@@ -1,0 +1,101 @@
+.plate-heatmap-container {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 20px;
+  padding: 20px;
+}
+
+.plate-heatmap {
+  display: grid;
+  gap: 0;
+  width: 800px;
+  height: 800px;
+  background: #1a1a1a;
+  border: 2px solid #333;
+}
+
+.well {
+  width: 100%;
+  height: 100%;
+  cursor: pointer;
+  transition: opacity 0.1s;
+  box-sizing: border-box;
+}
+
+.well:hover {
+  opacity: 0.8;
+  outline: 1px solid white;
+  z-index: 1;
+}
+
+/* Block borders */
+.well.block-top {
+  border-top: 1px solid rgba(255, 255, 255, 0.3);
+}
+
+.well.block-left {
+  border-left: 1px solid rgba(255, 255, 255, 0.3);
+}
+
+.well.block-bottom {
+  border-bottom: 1px solid rgba(255, 255, 255, 0.3);
+}
+
+.well.block-right {
+  border-right: 1px solid rgba(255, 255, 255, 0.3);
+}
+
+.tooltip {
+  position: fixed;
+  transform: translate(-50%, -100%);
+  background: rgba(0, 0, 0, 0.9);
+  color: white;
+  padding: 8px 12px;
+  border-radius: 4px;
+  font-size: 14px;
+  pointer-events: none;
+  z-index: 1000;
+  text-align: center;
+  min-width: 80px;
+}
+
+.tooltip-value {
+  font-weight: bold;
+  font-size: 16px;
+}
+
+.tooltip-index {
+  font-size: 12px;
+  color: #aaa;
+  margin-top: 2px;
+}
+
+.color-scale {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  width: 300px;
+}
+
+.scale-bar {
+  width: 100%;
+  height: 20px;
+  background: linear-gradient(to right,
+    hsl(240, 80%, 50%),
+    hsl(180, 80%, 50%),
+    hsl(120, 80%, 50%),
+    hsl(60, 80%, 50%),
+    hsl(0, 80%, 50%)
+  );
+  border-radius: 4px;
+}
+
+.scale-labels {
+  display: flex;
+  justify-content: space-between;
+  width: 100%;
+  margin-top: 4px;
+  font-size: 12px;
+  color: #666;
+}

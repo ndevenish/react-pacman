@@ -1,0 +1,17 @@
+.app {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  min-height: 100vh;
+  padding: 20px;
+}
+
+h1 {
+  margin-bottom: 8px;
+  color: #fff;
+}
+
+.description {
+  color: #888;
+  margin-bottom: 20px;
+}

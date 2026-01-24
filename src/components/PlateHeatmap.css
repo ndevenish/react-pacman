@@ -6,49 +6,14 @@
   padding: 20px;
 }
 
-.plate-heatmap {
-  display: grid;
-  gap: 0;
-  width: 800px;
-  height: 800px;
-  background: #1a1a1a;
+.plate-heatmap-canvas {
   border: 2px solid #333;
-}
-
-.well {
-  width: 100%;
-  height: 100%;
-  cursor: pointer;
-  transition: opacity 0.1s;
-  box-sizing: border-box;
-}
-
-.well:hover {
-  opacity: 0.8;
-  outline: 1px solid white;
-  z-index: 1;
-}
-
-/* Block borders */
-.well.block-top {
-  border-top: 1px solid rgba(255, 255, 255, 0.3);
-}
-
-.well.block-left {
-  border-left: 1px solid rgba(255, 255, 255, 0.3);
-}
-
-.well.block-bottom {
-  border-bottom: 1px solid rgba(255, 255, 255, 0.3);
-}
-
-.well.block-right {
-  border-right: 1px solid rgba(255, 255, 255, 0.3);
+  cursor: crosshair;
 }
 
 .tooltip {
   position: fixed;
-  transform: translate(-50%, -100%);
+  transform: translateX(-50%);
   background: rgba(0, 0, 0, 0.9);
   color: white;
   padding: 8px 12px;

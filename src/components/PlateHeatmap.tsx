@@ -169,7 +169,7 @@ export function PlateHeatmap({
     // Apply d3 transform
     ctx.setTransform(transform.k, 0, 0, transform.k, transform.x, transform.y);
 
-    // Draw only active blocks
+    // Draw block borders and wells for active blocks
     for (const blockIndex of activeBlockSet) {
       const { row: blockRow, col: blockCol } = blockIndexToPosition(blockIndex, blockRows);
       const wellMap = blockWellMaps.get(blockIndex);
@@ -178,12 +178,18 @@ export function PlateHeatmap({
       const blockOffsetX = blockCol * (blockPixelWidth + gapWidth);
       const blockOffsetY = blockRow * (blockPixelHeight + gapHeight);
 
+      // Draw block border
+      ctx.strokeStyle = 'rgba(255, 255, 255, 0.3)';
+      ctx.lineWidth = 1 / transform.k; // Keep border width consistent at all zoom levels
+      ctx.strokeRect(blockOffsetX, blockOffsetY, blockPixelWidth, blockPixelHeight);
+
+      // Draw wells that have data
       for (let wellRow = 0; wellRow < wellsPerBlockRow; wellRow++) {
         for (let wellCol = 0; wellCol < wellsPerBlockCol; wellCol++) {
           const dataIndex = wellMap.get(`${wellRow},${wellCol}`);
-          if (dataIndex === undefined) continue;
+          if (dataIndex === undefined || dataIndex >= data.length) continue;
 
-          const value = data[dataIndex] ?? 0;
+          const value = data[dataIndex];
           const [r, g, b] = valueToColor(value, min, max);
 
           ctx.fillStyle = `rgb(${r},${g},${b})`;

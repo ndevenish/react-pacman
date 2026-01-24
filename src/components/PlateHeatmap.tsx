@@ -269,30 +269,39 @@ export function PlateHeatmap({
     setIsDragging(false);
   }, []);
 
-  const handleWheel = useCallback((e: React.WheelEvent<HTMLCanvasElement>) => {
-    e.preventDefault();
-
+  // Attach non-passive wheel listener to prevent page scroll
+  useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
 
-    const rect = canvas.getBoundingClientRect();
-    const mouseX = e.clientX - rect.left;
-    const mouseY = e.clientY - rect.top;
+    const handleWheel = (e: WheelEvent) => {
+      e.preventDefault();
 
-    // Zoom factor
-    const zoomFactor = e.deltaY < 0 ? 1.1 : 0.9;
-    const newZoom = Math.min(Math.max(zoom * zoomFactor, 0.5), 10);
+      const rect = canvas.getBoundingClientRect();
+      const mouseX = e.clientX - rect.left;
+      const mouseY = e.clientY - rect.top;
 
-    // Adjust pan to zoom toward mouse position
-    const canvasX = (mouseX - pan.x) / zoom;
-    const canvasY = (mouseY - pan.y) / zoom;
+      const zoomFactor = e.deltaY < 0 ? 1.1 : 0.9;
 
-    const newPanX = mouseX - canvasX * newZoom;
-    const newPanY = mouseY - canvasY * newZoom;
+      setZoom(prevZoom => {
+        const newZoom = Math.min(Math.max(prevZoom * zoomFactor, 0.5), 10);
 
-    setZoom(newZoom);
-    setPan({ x: newPanX, y: newPanY });
-  }, [zoom, pan]);
+        setPan(prevPan => {
+          const canvasX = (mouseX - prevPan.x) / prevZoom;
+          const canvasY = (mouseY - prevPan.y) / prevZoom;
+          return {
+            x: mouseX - canvasX * newZoom,
+            y: mouseY - canvasY * newZoom,
+          };
+        });
+
+        return newZoom;
+      });
+    };
+
+    canvas.addEventListener('wheel', handleWheel, { passive: false });
+    return () => canvas.removeEventListener('wheel', handleWheel);
+  }, []);
 
   const handleMouseDown = useCallback((e: React.MouseEvent<HTMLCanvasElement>) => {
     if (e.button === 0) { // Left click
@@ -334,7 +343,6 @@ export function PlateHeatmap({
         className={`plate-heatmap-canvas ${isDragging ? 'dragging' : ''}`}
         onMouseMove={handleMouseMove}
         onMouseLeave={handleMouseLeave}
-        onWheel={handleWheel}
         onMouseDown={handleMouseDown}
         onMouseUp={handleMouseUp}
       />

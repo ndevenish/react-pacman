@@ -11,10 +11,6 @@
   cursor: crosshair;
 }
 
-.plate-heatmap-canvas.dragging {
-  cursor: grabbing;
-}
-
 .zoom-controls {
   display: flex;
   align-items: center;

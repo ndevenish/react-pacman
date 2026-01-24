@@ -1,4 +1,6 @@
 import { useRef, useEffect, useState, useCallback, useMemo } from 'react';
+import { select } from 'd3-selection';
+import { zoom, zoomIdentity, ZoomTransform } from 'd3-zoom';
 import './PlateHeatmap.css';
 
 interface PlateHeatmapProps {
@@ -98,11 +100,9 @@ export function PlateHeatmap({
     y: number;
   } | null>(null);
 
-  // Zoom and pan state
-  const [zoom, setZoom] = useState(1);
-  const [pan, setPan] = useState({ x: 0, y: 0 });
-  const [isDragging, setIsDragging] = useState(false);
-  const dragStartRef = useRef({ x: 0, y: 0, panX: 0, panY: 0 });
+  // Store transform in state for rendering and coordinate conversion
+  const [transform, setTransform] = useState<ZoomTransform>(zoomIdentity);
+  const zoomBehaviorRef = useRef<ReturnType<typeof zoom<HTMLCanvasElement, unknown>> | null>(null);
 
   const activeBlockSet = useMemo(() => {
     if (!activeBlocks) {
@@ -128,6 +128,28 @@ export function PlateHeatmap({
   const blockPixelWidth = wellsPerBlockCol * cellWidth;
   const blockPixelHeight = wellsPerBlockRow * cellHeight;
 
+  // Setup d3-zoom
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+
+    const zoomBehavior = zoom<HTMLCanvasElement, unknown>()
+      .scaleExtent([0.5, 10])
+      .on('zoom', (event) => {
+        setTransform(event.transform);
+      });
+
+    zoomBehaviorRef.current = zoomBehavior;
+
+    select(canvas)
+      .call(zoomBehavior)
+      .on('dblclick.zoom', null); // Disable double-click zoom
+
+    return () => {
+      select(canvas).on('.zoom', null);
+    };
+  }, []);
+
   // Draw the heatmap
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -139,13 +161,13 @@ export function PlateHeatmap({
     const min = data.length > 0 ? Math.min(...data) : 0;
     const max = data.length > 0 ? Math.max(...data) : 1;
 
-    // Clear and apply transform
+    // Clear canvas
     ctx.setTransform(1, 0, 0, 1, 0, 0);
     ctx.fillStyle = '#1a1a1a';
     ctx.fillRect(0, 0, width, height);
 
-    // Apply zoom and pan
-    ctx.setTransform(zoom, 0, 0, zoom, pan.x, pan.y);
+    // Apply d3 transform
+    ctx.setTransform(transform.k, 0, 0, transform.k, transform.x, transform.y);
 
     // Draw only active blocks
     for (const blockIndex of activeBlockSet) {
@@ -175,39 +197,20 @@ export function PlateHeatmap({
       }
     }
 
-    // Reset transform
     ctx.setTransform(1, 0, 0, 1, 0, 0);
-  }, [data, width, height, activeBlockSet, blockWellMaps, blockRows, wellsPerBlockRow, wellsPerBlockCol, cellWidth, cellHeight, blockPixelWidth, blockPixelHeight, gapWidth, gapHeight, zoom, pan]);
-
-  // Convert screen coordinates to canvas coordinates
-  const screenToCanvas = useCallback((screenX: number, screenY: number) => {
-    return {
-      x: (screenX - pan.x) / zoom,
-      y: (screenY - pan.y) / zoom,
-    };
-  }, [zoom, pan]);
+  }, [data, width, height, activeBlockSet, blockWellMaps, blockRows, wellsPerBlockRow, wellsPerBlockCol, cellWidth, cellHeight, blockPixelWidth, blockPixelHeight, gapWidth, gapHeight, transform]);
 
   const handleMouseMove = useCallback((e: React.MouseEvent<HTMLCanvasElement>) => {
     const canvas = canvasRef.current;
     if (!canvas) return;
 
-    // Handle dragging for pan
-    if (isDragging) {
-      const dx = e.clientX - dragStartRef.current.x;
-      const dy = e.clientY - dragStartRef.current.y;
-      setPan({
-        x: dragStartRef.current.panX + dx,
-        y: dragStartRef.current.panY + dy,
-      });
-      return;
-    }
-
     const rect = canvas.getBoundingClientRect();
     const screenX = e.clientX - rect.left;
     const screenY = e.clientY - rect.top;
 
-    // Convert to canvas coordinates
-    const { x, y } = screenToCanvas(screenX, screenY);
+    // Convert screen to canvas coordinates using d3 transform
+    const x = (screenX - transform.x) / transform.k;
+    const y = (screenY - transform.y) / transform.k;
 
     const blockStepX = blockPixelWidth + gapWidth;
     const blockStepY = blockPixelHeight + gapHeight;
@@ -262,66 +265,40 @@ export function PlateHeatmap({
       x: e.clientX,
       y: e.clientY,
     });
-  }, [cellWidth, cellHeight, blockPixelWidth, blockPixelHeight, gapWidth, gapHeight, blockRows, blockCols, wellsPerBlockRow, wellsPerBlockCol, activeBlockSet, blockWellMaps, data, isDragging, screenToCanvas]);
+  }, [cellWidth, cellHeight, blockPixelWidth, blockPixelHeight, gapWidth, gapHeight, blockRows, blockCols, wellsPerBlockRow, wellsPerBlockCol, activeBlockSet, blockWellMaps, data, transform]);
 
   const handleMouseLeave = useCallback(() => {
     setTooltip(null);
-    setIsDragging(false);
-  }, []);
-
-  // Attach non-passive wheel listener to prevent page scroll
-  useEffect(() => {
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-
-    const handleWheel = (e: WheelEvent) => {
-      e.preventDefault();
-
-      const rect = canvas.getBoundingClientRect();
-      const mouseX = e.clientX - rect.left;
-      const mouseY = e.clientY - rect.top;
-
-      const zoomFactor = e.deltaY < 0 ? 1.1 : 0.9;
-
-      setZoom(prevZoom => {
-        const newZoom = Math.min(Math.max(prevZoom * zoomFactor, 0.5), 10);
-
-        setPan(prevPan => {
-          const canvasX = (mouseX - prevPan.x) / prevZoom;
-          const canvasY = (mouseY - prevPan.y) / prevZoom;
-          return {
-            x: mouseX - canvasX * newZoom,
-            y: mouseY - canvasY * newZoom,
-          };
-        });
-
-        return newZoom;
-      });
-    };
-
-    canvas.addEventListener('wheel', handleWheel, { passive: false });
-    return () => canvas.removeEventListener('wheel', handleWheel);
-  }, []);
-
-  const handleMouseDown = useCallback((e: React.MouseEvent<HTMLCanvasElement>) => {
-    if (e.button === 0) { // Left click
-      setIsDragging(true);
-      dragStartRef.current = {
-        x: e.clientX,
-        y: e.clientY,
-        panX: pan.x,
-        panY: pan.y,
-      };
-    }
-  }, [pan]);
-
-  const handleMouseUp = useCallback(() => {
-    setIsDragging(false);
   }, []);
 
   const handleReset = useCallback(() => {
-    setZoom(1);
-    setPan({ x: 0, y: 0 });
+    const canvas = canvasRef.current;
+    if (!canvas || !zoomBehaviorRef.current) return;
+
+    select(canvas)
+      .transition()
+      .duration(300)
+      .call(zoomBehaviorRef.current.transform, zoomIdentity);
+  }, []);
+
+  const handleZoomIn = useCallback(() => {
+    const canvas = canvasRef.current;
+    if (!canvas || !zoomBehaviorRef.current) return;
+
+    select(canvas)
+      .transition()
+      .duration(200)
+      .call(zoomBehaviorRef.current.scaleBy, 1.3);
+  }, []);
+
+  const handleZoomOut = useCallback(() => {
+    const canvas = canvasRef.current;
+    if (!canvas || !zoomBehaviorRef.current) return;
+
+    select(canvas)
+      .transition()
+      .duration(200)
+      .call(zoomBehaviorRef.current.scaleBy, 0.7);
   }, []);
 
   const min = data.length > 0 ? Math.min(...data) : 0;
@@ -330,9 +307,9 @@ export function PlateHeatmap({
   return (
     <div className="plate-heatmap-container">
       <div className="zoom-controls">
-        <span className="zoom-level">{Math.round(zoom * 100)}%</span>
-        <button onClick={() => setZoom(z => Math.min(z * 1.2, 10))}>+</button>
-        <button onClick={() => setZoom(z => Math.max(z / 1.2, 0.5))}>-</button>
+        <span className="zoom-level">{Math.round(transform.k * 100)}%</span>
+        <button onClick={handleZoomIn}>+</button>
+        <button onClick={handleZoomOut}>-</button>
         <button onClick={handleReset}>Reset</button>
       </div>
 
@@ -340,14 +317,12 @@ export function PlateHeatmap({
         ref={canvasRef}
         width={width}
         height={height}
-        className={`plate-heatmap-canvas ${isDragging ? 'dragging' : ''}`}
+        className="plate-heatmap-canvas"
         onMouseMove={handleMouseMove}
         onMouseLeave={handleMouseLeave}
-        onMouseDown={handleMouseDown}
-        onMouseUp={handleMouseUp}
       />
 
-      {tooltip && !isDragging && (
+      {tooltip && (
         <div
           className="tooltip"
           style={{

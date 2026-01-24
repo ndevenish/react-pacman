@@ -13,6 +13,8 @@ interface PlateHeatmapProps {
   activeBlocks?: number[];
   width?: number;
   height?: number;
+  blockBackgroundColor?: string;
+  gapColor?: string;
 }
 
 function valueToColor(value: number, min: number, max: number): [number, number, number] {
@@ -101,6 +103,8 @@ export function PlateHeatmap({
   activeBlocks,
   width = 800,
   height = 800,
+  blockBackgroundColor = '#2a2a2a',
+  gapColor = '#1a1a1a',
 }: PlateHeatmapProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [tooltip, setTooltip] = useState<{
@@ -171,15 +175,15 @@ export function PlateHeatmap({
     const min = data.length > 0 ? Math.min(...data) : 0;
     const max = data.length > 0 ? Math.max(...data) : 1;
 
-    // Clear canvas
+    // Clear canvas with gap color
     ctx.setTransform(1, 0, 0, 1, 0, 0);
-    ctx.fillStyle = '#1a1a1a';
+    ctx.fillStyle = gapColor;
     ctx.fillRect(0, 0, width, height);
 
     // Apply d3 transform
     ctx.setTransform(transform.k, 0, 0, transform.k, transform.x, transform.y);
 
-    // Draw block borders and wells for active blocks
+    // Draw block backgrounds and wells for active blocks
     for (const blockIndex of activeBlockSet) {
       const { row: blockRow, col: blockCol } = blockIndexToPosition(blockIndex, blockRows);
       const wellMap = blockWellMaps.get(blockIndex);
@@ -188,9 +192,13 @@ export function PlateHeatmap({
       const blockOffsetX = blockCol * (blockPixelWidth + gapWidth);
       const blockOffsetY = blockRow * (blockPixelHeight + gapHeight);
 
+      // Draw block background
+      ctx.fillStyle = blockBackgroundColor;
+      ctx.fillRect(blockOffsetX, blockOffsetY, blockPixelWidth, blockPixelHeight);
+
       // Draw block border
       ctx.strokeStyle = 'rgba(255, 255, 255, 0.3)';
-      ctx.lineWidth = 1 / transform.k; // Keep border width consistent at all zoom levels
+      ctx.lineWidth = 1 / transform.k;
       ctx.strokeRect(blockOffsetX, blockOffsetY, blockPixelWidth, blockPixelHeight);
 
       // Draw wells that have data
@@ -214,7 +222,7 @@ export function PlateHeatmap({
     }
 
     ctx.setTransform(1, 0, 0, 1, 0, 0);
-  }, [data, width, height, activeBlockSet, blockWellMaps, blockRows, wellsPerBlockRow, wellsPerBlockCol, cellWidth, cellHeight, blockPixelWidth, blockPixelHeight, gapWidth, gapHeight, transform]);
+  }, [data, width, height, activeBlockSet, blockWellMaps, blockRows, wellsPerBlockRow, wellsPerBlockCol, cellWidth, cellHeight, blockPixelWidth, blockPixelHeight, gapWidth, gapHeight, transform, blockBackgroundColor, gapColor]);
 
   const handleMouseMove = useCallback((e: React.MouseEvent<HTMLCanvasElement>) => {
     const canvas = canvasRef.current;

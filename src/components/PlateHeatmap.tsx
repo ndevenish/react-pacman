@@ -64,9 +64,19 @@ function buildBlockWellMap(
   const wellsPerBlock = wellsPerBlockRow * wellsPerBlockCol;
   const baseDataIndex = blockIndex * wellsPerBlock;
 
+  // Determine which column this block is in
+  const blockCol = Math.floor(blockIndex / blockRows);
+  const columnGoingDown = blockCol % 2 === 0;
+
   let localIndex = 0;
-  for (let wellRow = 0; wellRow < wellsPerBlockRow; wellRow++) {
-    const rowGoingRight = wellRow % 2 === 0;
+  for (let wellRowStep = 0; wellRowStep < wellsPerBlockRow; wellRowStep++) {
+    // In odd columns, we traverse rows bottom-to-top
+    const wellRow = columnGoingDown
+      ? wellRowStep
+      : wellsPerBlockRow - 1 - wellRowStep;
+
+    // Determine horizontal direction based on which row we're on in the traversal
+    const rowGoingRight = wellRowStep % 2 === 0;
 
     for (let wellColStep = 0; wellColStep < wellsPerBlockCol; wellColStep++) {
       const wellCol = rowGoingRight

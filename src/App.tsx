@@ -7,11 +7,15 @@ type DataMode = 'linear' | 'linear-subset' | 'random' | 'streaming';
 const SUBSET_BLOCKS = [0, 1, 2, 8, 9, 16, 17, 18, 24, 32, 40, 48, 56, 57, 58, 59, 60, 61, 62, 63];
 const TOTAL_WELLS = 25600;
 const STREAM_RATE = 100; // wells per second
+const STREAM_BATCH_SIZE = 5; // Add multiple wells per tick for efficiency
 
 function App() {
   const [dataMode, setDataMode] = useState<DataMode>('linear');
-  const [streamingData, setStreamingData] = useState<number[]>([]);
+  const [streamingCount, setStreamingCount] = useState(0);
   const intervalRef = useRef<number | null>(null);
+
+  // Pre-allocate streaming data array once
+  const streamingDataRef = useRef<number[]>([]);
 
   const stopStreaming = useCallback(() => {
     if (intervalRef.current !== null) {
@@ -21,66 +25,86 @@ function App() {
   }, []);
 
   const startStreaming = useCallback(() => {
-    setStreamingData([]);
+    // Pre-allocate the full array
+    streamingDataRef.current = new Array(TOTAL_WELLS);
+    for (let i = 0; i < TOTAL_WELLS; i++) {
+      streamingDataRef.current[i] = i + 1;
+    }
+    setStreamingCount(0);
     stopStreaming();
 
     intervalRef.current = window.setInterval(() => {
-      setStreamingData(prev => {
-        if (prev.length >= TOTAL_WELLS) {
+      setStreamingCount(prev => {
+        const next = Math.min(prev + STREAM_BATCH_SIZE, TOTAL_WELLS);
+        if (next >= TOTAL_WELLS) {
           stopStreaming();
-          return prev;
         }
-        // Add next value (1-indexed, like linear mode)
-        return [...prev, prev.length + 1];
+        return next;
       });
-    }, 1000 / STREAM_RATE);
+    }, (1000 / STREAM_RATE) * STREAM_BATCH_SIZE);
   }, [stopStreaming]);
 
-  // Handle mode changes
   useEffect(() => {
     if (dataMode === 'streaming') {
       startStreaming();
     } else {
       stopStreaming();
-      setStreamingData([]);
+      setStreamingCount(0);
     }
 
     return () => stopStreaming();
   }, [dataMode, startStreaming, stopStreaming]);
 
-  const { data, activeBlocks } = useMemo(() => {
+  const { data, activeBlocks, dataLength, minValue, maxValue } = useMemo(() => {
     switch (dataMode) {
       case 'linear':
         return {
           data: Array.from({ length: TOTAL_WELLS }, (_, i) => i + 1),
           activeBlocks: undefined,
+          dataLength: TOTAL_WELLS,
+          minValue: 1,
+          maxValue: TOTAL_WELLS,
         };
 
       case 'linear-subset':
         return {
           data: Array.from({ length: TOTAL_WELLS }, (_, i) => i + 1),
           activeBlocks: SUBSET_BLOCKS,
+          dataLength: TOTAL_WELLS,
+          minValue: 1,
+          maxValue: TOTAL_WELLS,
         };
 
-      case 'random':
+      case 'random': {
+        const randomData = Array.from({ length: TOTAL_WELLS }, () => Math.random() * 1000);
         return {
-          data: Array.from({ length: TOTAL_WELLS }, () => Math.random() * 1000),
+          data: randomData,
           activeBlocks: undefined,
+          dataLength: TOTAL_WELLS,
+          minValue: Math.min(...randomData),
+          maxValue: Math.max(...randomData),
         };
+      }
 
       case 'streaming':
         return {
-          data: streamingData,
+          data: streamingDataRef.current,
           activeBlocks: undefined,
+          dataLength: streamingCount,
+          minValue: 1,
+          maxValue: TOTAL_WELLS,
         };
 
       default:
         return {
           data: Array.from({ length: TOTAL_WELLS }, (_, i) => i + 1),
           activeBlocks: undefined,
+          dataLength: TOTAL_WELLS,
+          minValue: 1,
+          maxValue: TOTAL_WELLS,
         };
     }
-  }, [dataMode, streamingData]);
+  }, [dataMode, streamingCount]);
 
   const handleModeChange = (newMode: DataMode) => {
     setDataMode(newMode);
@@ -108,13 +132,19 @@ function App() {
 
         {dataMode === 'streaming' && (
           <>
-            <span className="stream-count">{streamingData.length.toLocaleString()} / {TOTAL_WELLS.toLocaleString()}</span>
+            <span className="stream-count">{streamingCount.toLocaleString()} / {TOTAL_WELLS.toLocaleString()}</span>
             <button onClick={startStreaming}>Restart</button>
           </>
         )}
       </div>
 
-      <PlateHeatmap data={data} activeBlocks={activeBlocks} />
+      <PlateHeatmap
+        data={data}
+        dataLength={dataLength}
+        activeBlocks={activeBlocks}
+        minValue={minValue}
+        maxValue={maxValue}
+      />
     </div>
   );
 }

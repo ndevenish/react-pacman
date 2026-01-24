@@ -5,6 +5,7 @@ import './PlateHeatmap.css';
 
 interface PlateHeatmapProps {
   data: number[];
+  dataLength?: number; // How many items in data to render (for streaming)
   blockRows?: number;
   blockCols?: number;
   wellsPerBlockRow?: number;
@@ -15,6 +16,8 @@ interface PlateHeatmapProps {
   height?: number;
   blockBackgroundColor?: string;
   gapColor?: string;
+  minValue?: number;
+  maxValue?: number;
 }
 
 function valueToColor(value: number, min: number, max: number): [number, number, number] {
@@ -95,6 +98,7 @@ function buildBlockWellMap(
 
 export function PlateHeatmap({
   data,
+  dataLength,
   blockRows = 8,
   blockCols = 8,
   wellsPerBlockRow = 20,
@@ -105,7 +109,11 @@ export function PlateHeatmap({
   height = 800,
   blockBackgroundColor = '#2a2a2a',
   gapColor = '#1a1a1a',
+  minValue,
+  maxValue,
 }: PlateHeatmapProps) {
+  // Use dataLength if provided, otherwise use data.length
+  const effectiveDataLength = dataLength ?? data.length;
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [tooltip, setTooltip] = useState<{
     value: number;
@@ -172,8 +180,9 @@ export function PlateHeatmap({
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
 
-    const min = data.length > 0 ? Math.min(...data) : 0;
-    const max = data.length > 0 ? Math.max(...data) : 1;
+    // Use provided min/max or calculate from data
+    const min = minValue ?? (effectiveDataLength > 0 ? Math.min(...data.slice(0, effectiveDataLength)) : 0);
+    const max = maxValue ?? (effectiveDataLength > 0 ? Math.max(...data.slice(0, effectiveDataLength)) : 1);
 
     // Clear canvas with gap color
     ctx.setTransform(1, 0, 0, 1, 0, 0);
@@ -205,7 +214,7 @@ export function PlateHeatmap({
       for (let wellRow = 0; wellRow < wellsPerBlockRow; wellRow++) {
         for (let wellCol = 0; wellCol < wellsPerBlockCol; wellCol++) {
           const dataIndex = wellMap.get(`${wellRow},${wellCol}`);
-          if (dataIndex === undefined || dataIndex >= data.length) continue;
+          if (dataIndex === undefined || dataIndex >= effectiveDataLength) continue;
 
           const value = data[dataIndex];
           const [r, g, b] = valueToColor(value, min, max);
@@ -222,7 +231,7 @@ export function PlateHeatmap({
     }
 
     ctx.setTransform(1, 0, 0, 1, 0, 0);
-  }, [data, width, height, activeBlockSet, blockWellMaps, blockRows, wellsPerBlockRow, wellsPerBlockCol, cellWidth, cellHeight, blockPixelWidth, blockPixelHeight, gapWidth, gapHeight, transform, blockBackgroundColor, gapColor]);
+  }, [data, effectiveDataLength, width, height, activeBlockSet, blockWellMaps, blockRows, wellsPerBlockRow, wellsPerBlockCol, cellWidth, cellHeight, blockPixelWidth, blockPixelHeight, gapWidth, gapHeight, transform, blockBackgroundColor, gapColor, minValue, maxValue]);
 
   const handleMouseMove = useCallback((e: React.MouseEvent<HTMLCanvasElement>) => {
     const canvas = canvasRef.current;
@@ -276,12 +285,12 @@ export function PlateHeatmap({
     }
 
     const dataIndex = wellMap.get(`${wellRow},${wellCol}`);
-    if (dataIndex === undefined) {
+    if (dataIndex === undefined || dataIndex >= effectiveDataLength) {
       setTooltip(null);
       return;
     }
 
-    const value = data[dataIndex] ?? 0;
+    const value = data[dataIndex];
 
     setTooltip({
       value,
@@ -289,7 +298,7 @@ export function PlateHeatmap({
       x: e.clientX,
       y: e.clientY,
     });
-  }, [cellWidth, cellHeight, blockPixelWidth, blockPixelHeight, gapWidth, gapHeight, blockRows, blockCols, wellsPerBlockRow, wellsPerBlockCol, activeBlockSet, blockWellMaps, data, transform]);
+  }, [cellWidth, cellHeight, blockPixelWidth, blockPixelHeight, gapWidth, gapHeight, blockRows, blockCols, wellsPerBlockRow, wellsPerBlockCol, activeBlockSet, blockWellMaps, data, effectiveDataLength, transform]);
 
   const handleMouseLeave = useCallback(() => {
     setTooltip(null);
@@ -325,8 +334,8 @@ export function PlateHeatmap({
       .call(zoomBehaviorRef.current.scaleBy, 0.7);
   }, []);
 
-  const min = data.length > 0 ? Math.min(...data) : 0;
-  const max = data.length > 0 ? Math.max(...data) : 1;
+  const min = minValue ?? (effectiveDataLength > 0 ? Math.min(...data.slice(0, effectiveDataLength)) : 0);
+  const max = maxValue ?? (effectiveDataLength > 0 ? Math.max(...data.slice(0, effectiveDataLength)) : 1);
 
   return (
     <div className="plate-heatmap-container">

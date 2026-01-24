@@ -7,7 +7,8 @@ interface PlateHeatmapProps {
   blockCols?: number;
   wellsPerBlockRow?: number;
   wellsPerBlockCol?: number;
-  blockGapWells?: number; // Gap between blocks in well-units
+  blockGapWells?: number;
+  activeBlocks?: number[]; // Which blocks to render (by snake-order index)
   width?: number;
   height?: number;
 }
@@ -37,42 +38,44 @@ function valueToColor(value: number, min: number, max: number): [number, number,
   ];
 }
 
-function buildWellMap(
+// Convert block index (snake order) to grid position
+function blockIndexToPosition(index: number, blockRows: number): { row: number; col: number } {
+  const col = Math.floor(index / blockRows);
+  const rowInCol = index % blockRows;
+  const colGoingDown = col % 2 === 0;
+  const row = colGoingDown ? rowInCol : blockRows - 1 - rowInCol;
+  return { row, col };
+}
+
+// Convert grid position to block index (snake order)
+function positionToBlockIndex(row: number, col: number, blockRows: number): number {
+  const colGoingDown = col % 2 === 0;
+  const rowInCol = colGoingDown ? row : blockRows - 1 - row;
+  return col * blockRows + rowInCol;
+}
+
+// Build well map for a specific block
+function buildBlockWellMap(
+  blockIndex: number,
   blockRows: number,
-  blockCols: number,
   wellsPerBlockRow: number,
   wellsPerBlockCol: number
-): number[][] {
-  const map: number[][] = [];
-  for (let r = 0; r < blockRows * wellsPerBlockRow; r++) {
-    map[r] = new Array(blockCols * wellsPerBlockCol).fill(-1);
-  }
+): Map<string, number> {
+  const map = new Map<string, number>();
+  const wellsPerBlock = wellsPerBlockRow * wellsPerBlockCol;
+  const baseDataIndex = blockIndex * wellsPerBlock;
 
-  let dataIndex = 0;
+  let localIndex = 0;
+  for (let wellRow = 0; wellRow < wellsPerBlockRow; wellRow++) {
+    const rowGoingRight = wellRow % 2 === 0;
 
-  for (let blockCol = 0; blockCol < blockCols; blockCol++) {
-    const colGoingDown = blockCol % 2 === 0;
+    for (let wellColStep = 0; wellColStep < wellsPerBlockCol; wellColStep++) {
+      const wellCol = rowGoingRight
+        ? wellColStep
+        : wellsPerBlockCol - 1 - wellColStep;
 
-    for (let blockRowStep = 0; blockRowStep < blockRows; blockRowStep++) {
-      const blockRow = colGoingDown
-        ? blockRowStep
-        : blockRows - 1 - blockRowStep;
-
-      for (let wellRow = 0; wellRow < wellsPerBlockRow; wellRow++) {
-        const rowGoingRight = wellRow % 2 === 0;
-
-        for (let wellColStep = 0; wellColStep < wellsPerBlockCol; wellColStep++) {
-          const wellCol = rowGoingRight
-            ? wellColStep
-            : wellsPerBlockCol - 1 - wellColStep;
-
-          const mapRow = blockRow * wellsPerBlockRow + wellRow;
-          const mapCol = blockCol * wellsPerBlockCol + wellCol;
-
-          map[mapRow][mapCol] = dataIndex;
-          dataIndex++;
-        }
-      }
+      map.set(`${wellRow},${wellCol}`, baseDataIndex + localIndex);
+      localIndex++;
     }
   }
 
@@ -86,6 +89,7 @@ export function PlateHeatmap({
   wellsPerBlockRow = 20,
   wellsPerBlockCol = 20,
   blockGapWells = 6.4,
+  activeBlocks,
   width = 800,
   height = 800,
 }: PlateHeatmapProps) {
@@ -97,10 +101,22 @@ export function PlateHeatmap({
     y: number;
   } | null>(null);
 
-  const wellMap = useMemo(
-    () => buildWellMap(blockRows, blockCols, wellsPerBlockRow, wellsPerBlockCol),
-    [blockRows, blockCols, wellsPerBlockRow, wellsPerBlockCol]
-  );
+  // Default to all blocks if not specified
+  const activeBlockSet = useMemo(() => {
+    if (!activeBlocks) {
+      return new Set(Array.from({ length: blockRows * blockCols }, (_, i) => i));
+    }
+    return new Set(activeBlocks);
+  }, [activeBlocks, blockRows, blockCols]);
+
+  // Build well maps for each active block
+  const blockWellMaps = useMemo(() => {
+    const maps = new Map<number, Map<string, number>>();
+    for (const blockIndex of activeBlockSet) {
+      maps.set(blockIndex, buildBlockWellMap(blockIndex, blockRows, wellsPerBlockRow, wellsPerBlockCol));
+    }
+    return maps;
+  }, [activeBlockSet, blockRows, wellsPerBlockRow, wellsPerBlockCol]);
 
   // Calculate dimensions accounting for gaps
   const totalWellsX = blockCols * wellsPerBlockCol + (blockCols - 1) * blockGapWells;
@@ -120,39 +136,42 @@ export function PlateHeatmap({
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
 
-    const min = Math.min(...data);
-    const max = Math.max(...data);
+    // Get min/max from data
+    const min = data.length > 0 ? Math.min(...data) : 0;
+    const max = data.length > 0 ? Math.max(...data) : 1;
 
     // Clear canvas
     ctx.fillStyle = '#1a1a1a';
     ctx.fillRect(0, 0, width, height);
 
-    // Draw wells block by block
-    for (let blockRow = 0; blockRow < blockRows; blockRow++) {
-      for (let blockCol = 0; blockCol < blockCols; blockCol++) {
-        const blockOffsetX = blockCol * (blockPixelWidth + gapWidth);
-        const blockOffsetY = blockRow * (blockPixelHeight + gapHeight);
+    // Draw only active blocks
+    for (const blockIndex of activeBlockSet) {
+      const { row: blockRow, col: blockCol } = blockIndexToPosition(blockIndex, blockRows);
+      const wellMap = blockWellMaps.get(blockIndex);
+      if (!wellMap) continue;
 
-        for (let wellRow = 0; wellRow < wellsPerBlockRow; wellRow++) {
-          for (let wellCol = 0; wellCol < wellsPerBlockCol; wellCol++) {
-            const mapRow = blockRow * wellsPerBlockRow + wellRow;
-            const mapCol = blockCol * wellsPerBlockCol + wellCol;
-            const dataIndex = wellMap[mapRow][mapCol];
-            const value = data[dataIndex] ?? 0;
-            const [r, g, b] = valueToColor(value, min, max);
+      const blockOffsetX = blockCol * (blockPixelWidth + gapWidth);
+      const blockOffsetY = blockRow * (blockPixelHeight + gapHeight);
 
-            ctx.fillStyle = `rgb(${r},${g},${b})`;
-            ctx.fillRect(
-              blockOffsetX + wellCol * cellWidth,
-              blockOffsetY + wellRow * cellHeight,
-              cellWidth,
-              cellHeight
-            );
-          }
+      for (let wellRow = 0; wellRow < wellsPerBlockRow; wellRow++) {
+        for (let wellCol = 0; wellCol < wellsPerBlockCol; wellCol++) {
+          const dataIndex = wellMap.get(`${wellRow},${wellCol}`);
+          if (dataIndex === undefined) continue;
+
+          const value = data[dataIndex] ?? 0;
+          const [r, g, b] = valueToColor(value, min, max);
+
+          ctx.fillStyle = `rgb(${r},${g},${b})`;
+          ctx.fillRect(
+            blockOffsetX + wellCol * cellWidth,
+            blockOffsetY + wellRow * cellHeight,
+            cellWidth,
+            cellHeight
+          );
         }
       }
     }
-  }, [data, width, height, wellMap, blockRows, blockCols, wellsPerBlockRow, wellsPerBlockCol, cellWidth, cellHeight, blockPixelWidth, blockPixelHeight, gapWidth, gapHeight]);
+  }, [data, width, height, activeBlockSet, blockWellMaps, blockRows, wellsPerBlockRow, wellsPerBlockCol, cellWidth, cellHeight, blockPixelWidth, blockPixelHeight, gapWidth, gapHeight]);
 
   const handleMouseMove = useCallback((e: React.MouseEvent<HTMLCanvasElement>) => {
     const canvas = canvasRef.current;
@@ -162,20 +181,24 @@ export function PlateHeatmap({
     const x = e.clientX - rect.left;
     const y = e.clientY - rect.top;
 
-    // Determine which block we're in
     const blockStepX = blockPixelWidth + gapWidth;
     const blockStepY = blockPixelHeight + gapHeight;
 
     const blockCol = Math.floor(x / blockStepX);
     const blockRow = Math.floor(y / blockStepY);
 
-    // Check if we're in a valid block
     if (blockCol < 0 || blockCol >= blockCols || blockRow < 0 || blockRow >= blockRows) {
       setTooltip(null);
       return;
     }
 
-    // Check if we're in the gap
+    // Check if this block is active
+    const blockIndex = positionToBlockIndex(blockRow, blockCol, blockRows);
+    if (!activeBlockSet.has(blockIndex)) {
+      setTooltip(null);
+      return;
+    }
+
     const xInBlock = x - blockCol * blockStepX;
     const yInBlock = y - blockRow * blockStepY;
 
@@ -184,7 +207,6 @@ export function PlateHeatmap({
       return;
     }
 
-    // Determine which well within the block
     const wellCol = Math.floor(xInBlock / cellWidth);
     const wellRow = Math.floor(yInBlock / cellHeight);
 
@@ -193,9 +215,18 @@ export function PlateHeatmap({
       return;
     }
 
-    const mapRow = blockRow * wellsPerBlockRow + wellRow;
-    const mapCol = blockCol * wellsPerBlockCol + wellCol;
-    const dataIndex = wellMap[mapRow][mapCol];
+    const wellMap = blockWellMaps.get(blockIndex);
+    if (!wellMap) {
+      setTooltip(null);
+      return;
+    }
+
+    const dataIndex = wellMap.get(`${wellRow},${wellCol}`);
+    if (dataIndex === undefined) {
+      setTooltip(null);
+      return;
+    }
+
     const value = data[dataIndex] ?? 0;
 
     setTooltip({
@@ -204,7 +235,7 @@ export function PlateHeatmap({
       x: e.clientX,
       y: e.clientY,
     });
-  }, [cellWidth, cellHeight, blockPixelWidth, blockPixelHeight, gapWidth, gapHeight, blockRows, blockCols, wellsPerBlockRow, wellsPerBlockCol, wellMap, data]);
+  }, [cellWidth, cellHeight, blockPixelWidth, blockPixelHeight, gapWidth, gapHeight, blockRows, blockCols, wellsPerBlockRow, wellsPerBlockCol, activeBlockSet, blockWellMaps, data]);
 
   const handleMouseLeave = useCallback(() => {
     setTooltip(null);

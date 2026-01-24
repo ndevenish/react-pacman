@@ -1,4 +1,4 @@
-import { useRef, useEffect, useState, useCallback } from 'react';
+import { useRef, useEffect, useState, useCallback, useMemo } from 'react';
 import './PlateHeatmap.css';
 
 interface PlateHeatmapProps {
@@ -7,16 +7,15 @@ interface PlateHeatmapProps {
   blockCols?: number;
   wellsPerBlockRow?: number;
   wellsPerBlockCol?: number;
+  blockGapWells?: number; // Gap between blocks in well-units
   width?: number;
   height?: number;
 }
 
 function valueToColor(value: number, min: number, max: number): [number, number, number] {
   const normalized = (value - min) / (max - min);
-  // Blue to Red gradient through green/yellow (HSL hue 240 -> 0)
   const hue = (1 - normalized) * 240;
 
-  // Convert HSL to RGB
   const s = 0.8;
   const l = 0.5;
   const c = (1 - Math.abs(2 * l - 1)) * s;
@@ -38,19 +37,15 @@ function valueToColor(value: number, min: number, max: number): [number, number,
   ];
 }
 
-// Build the mapping from visual position to data index
 function buildWellMap(
   blockRows: number,
   blockCols: number,
   wellsPerBlockRow: number,
   wellsPerBlockCol: number
 ): number[][] {
-  const totalVisualRows = blockRows * wellsPerBlockRow;
-  const totalVisualCols = blockCols * wellsPerBlockCol;
-
   const map: number[][] = [];
-  for (let r = 0; r < totalVisualRows; r++) {
-    map[r] = new Array(totalVisualCols).fill(0);
+  for (let r = 0; r < blockRows * wellsPerBlockRow; r++) {
+    map[r] = new Array(blockCols * wellsPerBlockCol).fill(-1);
   }
 
   let dataIndex = 0;
@@ -71,10 +66,10 @@ function buildWellMap(
             ? wellColStep
             : wellsPerBlockCol - 1 - wellColStep;
 
-          const visualRow = blockRow * wellsPerBlockRow + wellRow;
-          const visualCol = blockCol * wellsPerBlockCol + wellCol;
+          const mapRow = blockRow * wellsPerBlockRow + wellRow;
+          const mapCol = blockCol * wellsPerBlockCol + wellCol;
 
-          map[visualRow][visualCol] = dataIndex;
+          map[mapRow][mapCol] = dataIndex;
           dataIndex++;
         }
       }
@@ -90,11 +85,11 @@ export function PlateHeatmap({
   blockCols = 8,
   wellsPerBlockRow = 20,
   wellsPerBlockCol = 20,
+  blockGapWells = 6.4,
   width = 800,
   height = 800,
 }: PlateHeatmapProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  const wellMapRef = useRef<number[][] | null>(null);
   const [tooltip, setTooltip] = useState<{
     value: number;
     dataIndex: number;
@@ -102,16 +97,20 @@ export function PlateHeatmap({
     y: number;
   } | null>(null);
 
-  const totalRows = blockRows * wellsPerBlockRow;
-  const totalCols = blockCols * wellsPerBlockCol;
-  const cellWidth = width / totalCols;
-  const cellHeight = height / totalRows;
+  const wellMap = useMemo(
+    () => buildWellMap(blockRows, blockCols, wellsPerBlockRow, wellsPerBlockCol),
+    [blockRows, blockCols, wellsPerBlockRow, wellsPerBlockCol]
+  );
 
-  // Build well map once
-  if (!wellMapRef.current) {
-    wellMapRef.current = buildWellMap(blockRows, blockCols, wellsPerBlockRow, wellsPerBlockCol);
-  }
-  const wellMap = wellMapRef.current;
+  // Calculate dimensions accounting for gaps
+  const totalWellsX = blockCols * wellsPerBlockCol + (blockCols - 1) * blockGapWells;
+  const totalWellsY = blockRows * wellsPerBlockRow + (blockRows - 1) * blockGapWells;
+  const cellWidth = width / totalWellsX;
+  const cellHeight = height / totalWellsY;
+  const gapWidth = blockGapWells * cellWidth;
+  const gapHeight = blockGapWells * cellHeight;
+  const blockPixelWidth = wellsPerBlockCol * cellWidth;
+  const blockPixelHeight = wellsPerBlockRow * cellHeight;
 
   // Draw the heatmap
   useEffect(() => {
@@ -128,43 +127,32 @@ export function PlateHeatmap({
     ctx.fillStyle = '#1a1a1a';
     ctx.fillRect(0, 0, width, height);
 
-    // Draw wells
-    for (let row = 0; row < totalRows; row++) {
-      for (let col = 0; col < totalCols; col++) {
-        const dataIndex = wellMap[row][col];
-        const value = data[dataIndex] ?? 0;
-        const [r, g, b] = valueToColor(value, min, max);
+    // Draw wells block by block
+    for (let blockRow = 0; blockRow < blockRows; blockRow++) {
+      for (let blockCol = 0; blockCol < blockCols; blockCol++) {
+        const blockOffsetX = blockCol * (blockPixelWidth + gapWidth);
+        const blockOffsetY = blockRow * (blockPixelHeight + gapHeight);
 
-        ctx.fillStyle = `rgb(${r},${g},${b})`;
-        ctx.fillRect(
-          col * cellWidth,
-          row * cellHeight,
-          cellWidth,
-          cellHeight
-        );
+        for (let wellRow = 0; wellRow < wellsPerBlockRow; wellRow++) {
+          for (let wellCol = 0; wellCol < wellsPerBlockCol; wellCol++) {
+            const mapRow = blockRow * wellsPerBlockRow + wellRow;
+            const mapCol = blockCol * wellsPerBlockCol + wellCol;
+            const dataIndex = wellMap[mapRow][mapCol];
+            const value = data[dataIndex] ?? 0;
+            const [r, g, b] = valueToColor(value, min, max);
+
+            ctx.fillStyle = `rgb(${r},${g},${b})`;
+            ctx.fillRect(
+              blockOffsetX + wellCol * cellWidth,
+              blockOffsetY + wellRow * cellHeight,
+              cellWidth,
+              cellHeight
+            );
+          }
+        }
       }
     }
-
-    // Draw block borders
-    ctx.strokeStyle = 'rgba(255, 255, 255, 0.3)';
-    ctx.lineWidth = 1;
-
-    for (let blockRow = 0; blockRow <= blockRows; blockRow++) {
-      const y = blockRow * wellsPerBlockRow * cellHeight;
-      ctx.beginPath();
-      ctx.moveTo(0, y);
-      ctx.lineTo(width, y);
-      ctx.stroke();
-    }
-
-    for (let blockCol = 0; blockCol <= blockCols; blockCol++) {
-      const x = blockCol * wellsPerBlockCol * cellWidth;
-      ctx.beginPath();
-      ctx.moveTo(x, 0);
-      ctx.lineTo(x, height);
-      ctx.stroke();
-    }
-  }, [data, width, height, totalRows, totalCols, cellWidth, cellHeight, wellMap, blockRows, blockCols, wellsPerBlockRow, wellsPerBlockCol]);
+  }, [data, width, height, wellMap, blockRows, blockCols, wellsPerBlockRow, wellsPerBlockCol, cellWidth, cellHeight, blockPixelWidth, blockPixelHeight, gapWidth, gapHeight]);
 
   const handleMouseMove = useCallback((e: React.MouseEvent<HTMLCanvasElement>) => {
     const canvas = canvasRef.current;
@@ -174,21 +162,49 @@ export function PlateHeatmap({
     const x = e.clientX - rect.left;
     const y = e.clientY - rect.top;
 
-    const col = Math.floor(x / cellWidth);
-    const row = Math.floor(y / cellHeight);
+    // Determine which block we're in
+    const blockStepX = blockPixelWidth + gapWidth;
+    const blockStepY = blockPixelHeight + gapHeight;
 
-    if (row >= 0 && row < totalRows && col >= 0 && col < totalCols) {
-      const dataIndex = wellMap[row][col];
-      const value = data[dataIndex] ?? 0;
+    const blockCol = Math.floor(x / blockStepX);
+    const blockRow = Math.floor(y / blockStepY);
 
-      setTooltip({
-        value,
-        dataIndex,
-        x: e.clientX,
-        y: e.clientY,
-      });
+    // Check if we're in a valid block
+    if (blockCol < 0 || blockCol >= blockCols || blockRow < 0 || blockRow >= blockRows) {
+      setTooltip(null);
+      return;
     }
-  }, [cellWidth, cellHeight, totalRows, totalCols, wellMap, data]);
+
+    // Check if we're in the gap
+    const xInBlock = x - blockCol * blockStepX;
+    const yInBlock = y - blockRow * blockStepY;
+
+    if (xInBlock > blockPixelWidth || yInBlock > blockPixelHeight) {
+      setTooltip(null);
+      return;
+    }
+
+    // Determine which well within the block
+    const wellCol = Math.floor(xInBlock / cellWidth);
+    const wellRow = Math.floor(yInBlock / cellHeight);
+
+    if (wellCol < 0 || wellCol >= wellsPerBlockCol || wellRow < 0 || wellRow >= wellsPerBlockRow) {
+      setTooltip(null);
+      return;
+    }
+
+    const mapRow = blockRow * wellsPerBlockRow + wellRow;
+    const mapCol = blockCol * wellsPerBlockCol + wellCol;
+    const dataIndex = wellMap[mapRow][mapCol];
+    const value = data[dataIndex] ?? 0;
+
+    setTooltip({
+      value,
+      dataIndex,
+      x: e.clientX,
+      y: e.clientY,
+    });
+  }, [cellWidth, cellHeight, blockPixelWidth, blockPixelHeight, gapWidth, gapHeight, blockRows, blockCols, wellsPerBlockRow, wellsPerBlockCol, wellMap, data]);
 
   const handleMouseLeave = useCallback(() => {
     setTooltip(null);
@@ -212,8 +228,8 @@ export function PlateHeatmap({
         <div
           className="tooltip"
           style={{
-            left: tooltip.x,
-            top: tooltip.y - 40,
+            left: tooltip.x + 15,
+            top: tooltip.y - 50,
           }}
         >
           <div className="tooltip-value">{tooltip.value}</div>

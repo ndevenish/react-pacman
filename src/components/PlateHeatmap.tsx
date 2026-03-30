@@ -114,7 +114,7 @@ export function PlateHeatmap({
   const effectiveDataLength = dataLength ?? data.length;
   const canvasWrapperRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  const [canvasDims, setCanvasDims] = useState({ width: 400, height: 400 });
+  const [canvasDims, setCanvasDims] = useState({ width: 0, height: 0 });
   const [tooltip, setTooltip] = useState<{
     value: number;
     dataIndex: number;
@@ -152,10 +152,11 @@ export function PlateHeatmap({
 
   // When the canvas resizes, reset zoom to the centred default transform
   useEffect(() => {
+    // Always keep offsetRef current so the zoom setup effect can read it
+    offsetRef.current = { x: offsetX, y: offsetY };
     const canvas = canvasRef.current;
     if (!canvas || !zoomBehaviorRef.current) return;
     const centered = zoomIdentity.translate(offsetX, offsetY);
-    offsetRef.current = { x: offsetX, y: offsetY };
     select(canvas).call(zoomBehaviorRef.current.transform, centered);
     setTransform(centered);
     transformRef.current = centered;

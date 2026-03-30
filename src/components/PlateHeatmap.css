@@ -87,6 +87,23 @@
   border-radius: 3px;
 }
 
+.scale-toggle {
+  width: 36px;
+  height: 22px;
+  padding: 0;
+  font-size: 10px;
+  background: rgba(128, 128, 128, 0.15);
+  color: inherit;
+  border: 1px solid rgba(128, 128, 128, 0.3);
+  border-radius: 4px;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+.scale-toggle:hover {
+  background: rgba(128, 128, 128, 0.3);
+}
+
 .scale-label {
   font-size: 10px;
   color: inherit;

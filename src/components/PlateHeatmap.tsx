@@ -20,8 +20,17 @@ export interface PlateHeatmapProps {
   maxValue?: number;
 }
 
-function valueToColor(value: number, min: number, max: number): [number, number, number] {
-  const normalized = (value - min) / (max - min);
+function valueToColor(value: number, min: number, max: number, logScale: boolean): [number, number, number] {
+  let normalized: number;
+  if (logScale) {
+    const logVal = value >= 1 ? Math.log10(value) : 0;
+    const logMin = Math.log10(Math.max(1, min));
+    const logMax = Math.log10(Math.max(1, max));
+    normalized = logMax > logMin ? (logVal - logMin) / (logMax - logMin) : 0;
+  } else {
+    normalized = max > min ? (value - min) / (max - min) : 0;
+  }
+  normalized = Math.max(0, Math.min(1, normalized));
   const hue = (1 - normalized) * 240;
 
   const s = 0.8;
@@ -115,6 +124,7 @@ export function PlateHeatmap({
   const canvasWrapperRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [canvasDims, setCanvasDims] = useState({ width: 0, height: 0 });
+  const [logScale, setLogScale] = useState(false);
   const [tooltip, setTooltip] = useState<{
     value: number;
     dataIndex: number;
@@ -274,7 +284,7 @@ export function PlateHeatmap({
           if (dataIndex === undefined || dataIndex >= effectiveDataLength) continue;
 
           const value = data[dataIndex];
-          const [r, g, b] = valueToColor(value, min, max);
+          const [r, g, b] = valueToColor(value, min, max, logScale);
 
           ctx.fillStyle = `rgb(${r},${g},${b})`;
           ctx.fillRect(
@@ -288,7 +298,7 @@ export function PlateHeatmap({
     }
 
     ctx.setTransform(1, 0, 0, 1, 0, 0);
-  }, [data, effectiveDataLength, width, height, activeBlockSet, blockWellMaps, blockRows, wellsPerBlockRow, wellsPerBlockCol, cellWidth, cellHeight, blockPixelWidth, blockPixelHeight, gapWidth, gapHeight, transform, blockBackgroundColor, gapColor, minValue, maxValue]);
+  }, [data, effectiveDataLength, width, height, activeBlockSet, blockWellMaps, blockRows, wellsPerBlockRow, wellsPerBlockCol, cellWidth, cellHeight, blockPixelWidth, blockPixelHeight, gapWidth, gapHeight, transform, blockBackgroundColor, gapColor, minValue, maxValue, logScale]);
 
   const handleMouseMove = useCallback((e: React.MouseEvent<HTMLCanvasElement>) => {
     const canvas = canvasRef.current;
@@ -418,6 +428,9 @@ export function PlateHeatmap({
         <span className="scale-label">{maxVal}</span>
         <div className="scale-bar" />
         <span className="scale-label">{minVal}</span>
+        <button className="scale-toggle" onClick={() => setLogScale(l => !l)}>
+          {logScale ? 'Log' : 'Lin'}
+        </button>
       </div>
 
       {tooltip && (

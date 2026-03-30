@@ -183,8 +183,13 @@ export function PlateHeatmap({
       .call(zoomBehavior)
       .on('dblclick.zoom', null); // Disable double-click zoom
 
+    // Prevent page scroll when hovering over the canvas regardless of zoom level
+    const stopScroll = (e: WheelEvent) => e.preventDefault();
+    canvas.addEventListener('wheel', stopScroll, { passive: false });
+
     return () => {
       select(canvas).on('.zoom', null);
+      canvas.removeEventListener('wheel', stopScroll);
     };
   }, []);
 

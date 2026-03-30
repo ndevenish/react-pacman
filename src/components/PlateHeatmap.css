@@ -92,16 +92,17 @@
   height: 22px;
   padding: 0;
   font-size: 10px;
-  background: rgba(128, 128, 128, 0.15);
+  background: transparent;
   color: inherit;
-  border: 1px solid rgba(128, 128, 128, 0.3);
+  border: 1px solid transparent;
   border-radius: 4px;
   cursor: pointer;
   flex-shrink: 0;
 }
 
 .scale-toggle:hover {
-  background: rgba(128, 128, 128, 0.3);
+  background: rgba(128, 128, 128, 0.15);
+  border-color: rgba(128, 128, 128, 0.3);
 }
 
 .scale-label {

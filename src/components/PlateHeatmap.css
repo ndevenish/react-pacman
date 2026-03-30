@@ -1,51 +1,111 @@
 .plate-heatmap-container {
   display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 20px;
-  padding: 20px;
+  flex-direction: row;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  box-sizing: border-box;
 }
 
-.plate-heatmap-canvas {
-  border: 2px solid #333;
-  cursor: crosshair;
-}
-
+/* Left column: zoom controls */
 .zoom-controls {
   display: flex;
+  flex-direction: column;
   align-items: center;
-  gap: 8px;
+  gap: 4px;
+  padding: 8px 4px;
+  flex-shrink: 0;
+  width: 44px;
 }
 
 .zoom-controls button {
-  padding: 6px 12px;
-  font-size: 14px;
-  background: #333;
-  color: #fff;
-  border: 1px solid #555;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  font-size: 15px;
+  background: rgba(128, 128, 128, 0.15);
+  color: inherit;
+  border: 1px solid rgba(128, 128, 128, 0.3);
   border-radius: 4px;
   cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  line-height: 1;
 }
 
 .zoom-controls button:hover {
-  background: #444;
-  border-color: #666;
+  background: rgba(128, 128, 128, 0.3);
 }
 
 .zoom-level {
-  min-width: 50px;
+  font-size: 10px;
+  color: inherit;
+  opacity: 0.6;
   text-align: center;
-  font-size: 14px;
-  color: #aaa;
+  white-space: nowrap;
 }
 
+/* Center: canvas */
+.plate-heatmap-canvas-wrapper {
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  position: relative;
+  overflow: hidden;
+}
+
+.plate-heatmap-canvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+  cursor: crosshair;
+}
+
+/* Right column: color scale */
+.color-scale {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 8px 4px;
+  flex-shrink: 0;
+  width: 44px;
+  gap: 4px;
+}
+
+.scale-bar {
+  flex: 1;
+  width: 16px;
+  background: linear-gradient(
+    to bottom,
+    hsl(0, 80%, 50%),
+    hsl(60, 80%, 50%),
+    hsl(120, 80%, 50%),
+    hsl(180, 80%, 50%),
+    hsl(240, 80%, 50%)
+  );
+  border-radius: 3px;
+}
+
+.scale-label {
+  font-size: 10px;
+  color: inherit;
+  opacity: 0.6;
+  text-align: center;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 100%;
+}
+
+/* Tooltip (fixed-position, always on top) */
 .tooltip {
   position: fixed;
-  background: rgba(0, 0, 0, 0.9);
+  background: rgba(0, 0, 0, 0.85);
   color: white;
-  padding: 8px 12px;
+  padding: 6px 10px;
   border-radius: 4px;
-  font-size: 14px;
+  font-size: 13px;
   pointer-events: none;
   z-index: 1000;
   text-align: center;
@@ -54,40 +114,11 @@
 
 .tooltip-value {
   font-weight: bold;
-  font-size: 16px;
+  font-size: 15px;
 }
 
 .tooltip-index {
-  font-size: 12px;
+  font-size: 11px;
   color: #aaa;
   margin-top: 2px;
-}
-
-.color-scale {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  width: 300px;
-}
-
-.scale-bar {
-  width: 100%;
-  height: 20px;
-  background: linear-gradient(to right,
-    hsl(240, 80%, 50%),
-    hsl(180, 80%, 50%),
-    hsl(120, 80%, 50%),
-    hsl(60, 80%, 50%),
-    hsl(0, 80%, 50%)
-  );
-  border-radius: 4px;
-}
-
-.scale-labels {
-  display: flex;
-  justify-content: space-between;
-  width: 100%;
-  margin-top: 4px;
-  font-size: 12px;
-  color: #666;
 }

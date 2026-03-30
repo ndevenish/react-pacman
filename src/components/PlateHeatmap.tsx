@@ -14,8 +14,6 @@ export interface PlateHeatmapProps {
   wellsPerBlockCol?: number;
   blockGapWells?: number;
   activeBlocks?: number[];
-  width?: number;
-  height?: number;
   blockBackgroundColor?: string;
   gapColor?: string;
   minValue?: number;
@@ -107,8 +105,6 @@ export function PlateHeatmap({
   wellsPerBlockCol = 20,
   blockGapWells = 6.4,
   activeBlocks,
-  width = 800,
-  height = 800,
   blockBackgroundColor = '#2a2a2a',
   gapColor = '#1a1a1a',
   minValue,
@@ -116,7 +112,9 @@ export function PlateHeatmap({
 }: PlateHeatmapProps) {
   // Use dataLength if provided, otherwise use data.length
   const effectiveDataLength = dataLength ?? data.length;
+  const canvasWrapperRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const [canvasDims, setCanvasDims] = useState({ width: 400, height: 400 });
   const [tooltip, setTooltip] = useState<{
     value: number;
     dataIndex: number;
@@ -127,6 +125,22 @@ export function PlateHeatmap({
   // Store transform in state for rendering and coordinate conversion
   const [transform, setTransform] = useState<ZoomTransform>(zoomIdentity);
   const zoomBehaviorRef = useRef<ReturnType<typeof zoom<HTMLCanvasElement, unknown>> | null>(null);
+
+  // Track canvas wrapper size to fill it
+  useEffect(() => {
+    const wrapper = canvasWrapperRef.current;
+    if (!wrapper) return;
+    const observer = new ResizeObserver(([entry]) => {
+      const { width, height } = entry.contentRect;
+      if (width > 0 && height > 0) {
+        setCanvasDims({ width: Math.round(width), height: Math.round(height) });
+      }
+    });
+    observer.observe(wrapper);
+    return () => observer.disconnect();
+  }, []);
+
+  const { width, height } = canvasDims;
 
   const activeBlockSet = useMemo(() => {
     if (!activeBlocks) {
@@ -158,7 +172,7 @@ export function PlateHeatmap({
     if (!canvas) return;
 
     const zoomBehavior = zoom<HTMLCanvasElement, unknown>()
-      .scaleExtent([0.5, 10])
+      .scaleExtent([1, 10])
       .on('zoom', (event) => {
         setTransform(event.transform);
       });
@@ -208,7 +222,7 @@ export function PlateHeatmap({
       ctx.fillRect(blockOffsetX, blockOffsetY, blockPixelWidth, blockPixelHeight);
 
       // Draw block border
-      ctx.strokeStyle = 'rgba(255, 255, 255, 0.3)';
+      ctx.strokeStyle = 'rgba(128, 128, 128, 0.4)';
       ctx.lineWidth = 1 / transform.k;
       ctx.strokeRect(blockOffsetX, blockOffsetY, blockPixelWidth, blockPixelHeight);
 
@@ -336,26 +350,34 @@ export function PlateHeatmap({
       .call(zoomBehaviorRef.current.scaleBy, 0.7);
   }, []);
 
-  const min = minValue ?? (effectiveDataLength > 0 ? Math.min(...data.slice(0, effectiveDataLength)) : 0);
-  const max = maxValue ?? (effectiveDataLength > 0 ? Math.max(...data.slice(0, effectiveDataLength)) : 1);
+  const minVal = minValue ?? (effectiveDataLength > 0 ? Math.min(...data.slice(0, effectiveDataLength)) : 0);
+  const maxVal = maxValue ?? (effectiveDataLength > 0 ? Math.max(...data.slice(0, effectiveDataLength)) : 1);
 
   return (
     <div className="plate-heatmap-container">
       <div className="zoom-controls">
         <span className="zoom-level">{Math.round(transform.k * 100)}%</span>
         <button onClick={handleZoomIn}>+</button>
-        <button onClick={handleZoomOut}>-</button>
-        <button onClick={handleReset}>Reset</button>
+        <button onClick={handleZoomOut}>−</button>
+        <button onClick={handleReset}>⟳</button>
       </div>
 
-      <canvas
-        ref={canvasRef}
-        width={width}
-        height={height}
-        className="plate-heatmap-canvas"
-        onMouseMove={handleMouseMove}
-        onMouseLeave={handleMouseLeave}
-      />
+      <div className="plate-heatmap-canvas-wrapper" ref={canvasWrapperRef}>
+        <canvas
+          ref={canvasRef}
+          width={width}
+          height={height}
+          className="plate-heatmap-canvas"
+          onMouseMove={handleMouseMove}
+          onMouseLeave={handleMouseLeave}
+        />
+      </div>
+
+      <div className="color-scale">
+        <span className="scale-label">{maxVal}</span>
+        <div className="scale-bar" />
+        <span className="scale-label">{minVal}</span>
+      </div>
 
       {tooltip && (
         <div
@@ -369,14 +391,6 @@ export function PlateHeatmap({
           <div className="tooltip-index">Index: {tooltip.dataIndex}</div>
         </div>
       )}
-
-      <div className="color-scale">
-        <div className="scale-bar" />
-        <div className="scale-labels">
-          <span>{min}</span>
-          <span>{max}</span>
-        </div>
-      </div>
     </div>
   );
 }

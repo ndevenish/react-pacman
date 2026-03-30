@@ -142,6 +142,20 @@ export function PlateHeatmap({
 
   const { width, height } = canvasDims;
 
+  // Grid is always square; centre it in the (possibly non-square) canvas
+  const gridSize = Math.min(width, height);
+  const offsetX = (width - gridSize) / 2;
+  const offsetY = (height - gridSize) / 2;
+
+  // When the canvas resizes, reset zoom to the centred default transform
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas || !zoomBehaviorRef.current) return;
+    const centered = zoomIdentity.translate(offsetX, offsetY);
+    select(canvas).call(zoomBehaviorRef.current.transform, centered);
+    setTransform(centered);
+  }, [offsetX, offsetY]);
+
   const activeBlockSet = useMemo(() => {
     if (!activeBlocks) {
       return new Set(Array.from({ length: blockRows * blockCols }, (_, i) => i));
@@ -159,8 +173,8 @@ export function PlateHeatmap({
 
   const totalWellsX = blockCols * wellsPerBlockCol + (blockCols - 1) * blockGapWells;
   const totalWellsY = blockRows * wellsPerBlockRow + (blockRows - 1) * blockGapWells;
-  const cellWidth = width / totalWellsX;
-  const cellHeight = height / totalWellsY;
+  const cellWidth = gridSize / totalWellsX;
+  const cellHeight = gridSize / totalWellsY;
   const gapWidth = blockGapWells * cellWidth;
   const gapHeight = blockGapWells * cellHeight;
   const blockPixelWidth = wellsPerBlockCol * cellWidth;
@@ -332,8 +346,8 @@ export function PlateHeatmap({
     select(canvas)
       .transition()
       .duration(300)
-      .call(zoomBehaviorRef.current.transform, zoomIdentity);
-  }, []);
+      .call(zoomBehaviorRef.current.transform, zoomIdentity.translate(offsetX, offsetY));
+  }, [offsetX, offsetY]);
 
   const handleZoomIn = useCallback(() => {
     const canvas = canvasRef.current;

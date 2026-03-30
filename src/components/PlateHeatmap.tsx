@@ -125,6 +125,9 @@ export function PlateHeatmap({
   // Store transform in state for rendering and coordinate conversion
   const [transform, setTransform] = useState<ZoomTransform>(zoomIdentity);
   const zoomBehaviorRef = useRef<ReturnType<typeof zoom<HTMLCanvasElement, unknown>> | null>(null);
+  // Refs so the stable stopScroll closure can read current values without re-registering
+  const transformRef = useRef<ZoomTransform>(zoomIdentity);
+  const offsetRef = useRef({ x: 0, y: 0 });
 
   // Track canvas wrapper size to fill it
   useEffect(() => {
@@ -152,8 +155,10 @@ export function PlateHeatmap({
     const canvas = canvasRef.current;
     if (!canvas || !zoomBehaviorRef.current) return;
     const centered = zoomIdentity.translate(offsetX, offsetY);
+    offsetRef.current = { x: offsetX, y: offsetY };
     select(canvas).call(zoomBehaviorRef.current.transform, centered);
     setTransform(centered);
+    transformRef.current = centered;
   }, [offsetX, offsetY]);
 
   const activeBlockSet = useMemo(() => {
@@ -189,6 +194,7 @@ export function PlateHeatmap({
       .scaleExtent([1, 10])
       .on('zoom', (event) => {
         setTransform(event.transform);
+        transformRef.current = event.transform;
       });
 
     zoomBehaviorRef.current = zoomBehavior;
@@ -197,8 +203,19 @@ export function PlateHeatmap({
       .call(zoomBehavior)
       .on('dblclick.zoom', null); // Disable double-click zoom
 
-    // Prevent page scroll when hovering over the canvas regardless of zoom level
-    const stopScroll = (e: WheelEvent) => e.preventDefault();
+    // Prevent page scroll. When already at minimum zoom and scrolling out,
+    // animate back to the centred default instead.
+    const stopScroll = (e: WheelEvent) => {
+      e.preventDefault();
+      const t = transformRef.current;
+      if (t.k <= 1 && e.deltaY > 0 && zoomBehaviorRef.current) {
+        const { x: ox, y: oy } = offsetRef.current;
+        select(canvas)
+          .transition()
+          .duration(300)
+          .call(zoomBehaviorRef.current.transform, zoomIdentity.translate(ox, oy));
+      }
+    };
     canvas.addEventListener('wheel', stopScroll, { passive: false });
 
     return () => {

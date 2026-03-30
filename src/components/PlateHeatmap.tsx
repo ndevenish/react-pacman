@@ -1,9 +1,11 @@
 import { useRef, useEffect, useState, useCallback, useMemo } from 'react';
 import { select } from 'd3-selection';
-import { zoom, zoomIdentity, ZoomTransform } from 'd3-zoom';
+import { zoom, zoomIdentity } from 'd3-zoom';
+import type { ZoomTransform } from 'd3-zoom';
+import 'd3-transition';
 import './PlateHeatmap.css';
 
-interface PlateHeatmapProps {
+export interface PlateHeatmapProps {
   data: number[];
   dataLength?: number; // How many items in data to render (for streaming)
   blockRows?: number;

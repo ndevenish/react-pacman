@@ -21,8 +21,8 @@
   ],
   "scripts": {
     "dev": "vite",
-    "build": "vite build && tsc -p tsconfig.lib.json",
-    "prepare": "vite build && tsc -p tsconfig.lib.json",
+    "build": "vite build",
+    "prepare": "vite build",
     "lint": "eslint .",
     "preview": "vite preview"
   },
@@ -53,6 +53,7 @@
     "react-dom": "^19.2.0",
     "typescript": "~5.9.3",
     "typescript-eslint": "^8.46.4",
-    "vite": "^7.2.4"
+    "vite": "^7.2.4",
+    "vite-plugin-dts": "^4.5.4"
   }
 }

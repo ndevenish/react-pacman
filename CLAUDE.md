@@ -6,7 +6,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ```bash
 npm run dev       # Vite dev server with HMR (runs the App.tsx demo harness)
-npm run build     # vite build (JS/CSS bundles) + tsc -p tsconfig.lib.json (declarations)
+npm run build     # vite build (JS/CSS bundles + declarations via vite-plugin-dts)
 npm run lint      # eslint
 npm run preview   # preview the built demo app
 ```
@@ -27,8 +27,8 @@ This is a **dual-purpose repo**: a publishable React component library (`plate-h
 
 ### Build pipeline
 
-- `vite build` — reads `src/index.ts`, emits `dist/plate-heatmap.js` (ESM) and `dist/plate-heatmap.cjs` (CJS). React, react-dom, d3-selection, d3-transition, and d3-zoom are all external (peer deps).
-- `tsc -p tsconfig.lib.json` — emits declarations to `dist/` (`index.d.ts` + `components/PlateHeatmap.d.ts`). Uses `tsconfig.lib.json` which extends `tsconfig.app.json` with `emitDeclarationOnly: true`.
+- `vite build` — reads `src/index.ts`, emits `dist/plate-heatmap.js` (ESM), `dist/plate-heatmap.cjs` (CJS), and declarations (`index.d.ts` + `components/PlateHeatmap.d.ts`) via `vite-plugin-dts`. React, react-dom, d3-selection, d3-transition, and d3-zoom are all external (peer deps).
+- `tsconfig.lib.json` — used by vite-plugin-dts for declaration generation. Extends `tsconfig.app.json` with `emitDeclarationOnly: true`.
 - `tsconfig.app.json` has `noEmit: true` and is used only for type-checking the dev app.
 
 ### PlateHeatmap component

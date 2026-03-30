@@ -18,6 +18,7 @@ export interface PlateHeatmapProps {
   gapColor?: string;
   minValue?: number;
   maxValue?: number;
+  onSettingsClick?: (e: React.MouseEvent<HTMLButtonElement>) => void;
 }
 
 function valueToColor(value: number, min: number, max: number, logScale: boolean): [number, number, number] {
@@ -118,6 +119,7 @@ export function PlateHeatmap({
   gapColor = '#1a1a1a',
   minValue,
   maxValue,
+  onSettingsClick,
 }: PlateHeatmapProps) {
   // Use dataLength if provided, otherwise use data.length
   const effectiveDataLength = dataLength ?? data.length;
@@ -423,6 +425,9 @@ export function PlateHeatmap({
         <button onClick={handleZoomIn}>+</button>
         <button onClick={handleZoomOut}>−</button>
         <button onClick={handleReset}>⟳</button>
+        {onSettingsClick && (
+          <button className="settings-button" onClick={onSettingsClick}>⚙</button>
+        )}
       </div>
 
       <div className="plate-heatmap-canvas-wrapper" ref={canvasWrapperRef}>

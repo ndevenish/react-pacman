@@ -87,6 +87,28 @@
   border-radius: 3px;
 }
 
+.settings-button {
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  font-size: 15px;
+  background: transparent;
+  color: inherit;
+  border: 1px solid transparent;
+  border-radius: 4px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  line-height: 1;
+  margin-top: auto;
+}
+
+.settings-button:hover {
+  background: rgba(128, 128, 128, 0.3);
+  border-color: rgba(128, 128, 128, 0.3);
+}
+
 .scale-toggle {
   width: 36px;
   height: 22px;

@@ -155,6 +155,22 @@ export function PlateHeatmap({
 
   const { width, height } = canvasDims;
 
+  // Memoize min/max so we don't spread 25 600 elements on every render
+  // (tooltip state updates trigger re-renders; Math.min(...slice) is very expensive)
+  const [minVal, maxVal] = useMemo(() => {
+    if (effectiveDataLength === 0) return [minValue ?? 0, maxValue ?? 1];
+    let mn = minValue !== undefined ? minValue : Infinity;
+    let mx = maxValue !== undefined ? maxValue : -Infinity;
+    for (let i = 0; i < effectiveDataLength; i++) {
+      const v = data[i];
+      if (minValue === undefined && v < mn) mn = v;
+      if (maxValue === undefined && v > mx) mx = v;
+    }
+    if (mn === Infinity) mn = 0;
+    if (mx === -Infinity) mx = 1;
+    return [mn, mx];
+  }, [data, effectiveDataLength, minValue, maxValue]);
+
   // Grid is always square; centre it in the (possibly non-square) canvas
   const gridSize = Math.min(width, height);
   const offsetX = (width - gridSize) / 2;
@@ -247,9 +263,8 @@ export function PlateHeatmap({
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
 
-    // Use provided min/max or calculate from data
-    const min = minValue ?? (effectiveDataLength > 0 ? Math.min(...data.slice(0, effectiveDataLength)) : 0);
-    const max = maxValue ?? (effectiveDataLength > 0 ? Math.max(...data.slice(0, effectiveDataLength)) : 1);
+    const min = minVal;
+    const max = maxVal;
 
     // Clear canvas with gap color
     ctx.setTransform(1, 0, 0, 1, 0, 0);
@@ -298,7 +313,7 @@ export function PlateHeatmap({
     }
 
     ctx.setTransform(1, 0, 0, 1, 0, 0);
-  }, [data, effectiveDataLength, width, height, activeBlockSet, blockWellMaps, blockRows, wellsPerBlockRow, wellsPerBlockCol, cellWidth, cellHeight, blockPixelWidth, blockPixelHeight, gapWidth, gapHeight, transform, blockBackgroundColor, gapColor, minValue, maxValue, logScale]);
+  }, [data, effectiveDataLength, width, height, activeBlockSet, blockWellMaps, blockRows, wellsPerBlockRow, wellsPerBlockCol, cellWidth, cellHeight, blockPixelWidth, blockPixelHeight, gapWidth, gapHeight, transform, blockBackgroundColor, gapColor, minVal, maxVal, logScale]);
 
   const handleMouseMove = useCallback((e: React.MouseEvent<HTMLCanvasElement>) => {
     const canvas = canvasRef.current;
@@ -400,9 +415,6 @@ export function PlateHeatmap({
       .duration(200)
       .call(zoomBehaviorRef.current.scaleBy, 0.7);
   }, []);
-
-  const minVal = minValue ?? (effectiveDataLength > 0 ? Math.min(...data.slice(0, effectiveDataLength)) : 0);
-  const maxVal = maxValue ?? (effectiveDataLength > 0 ? Math.max(...data.slice(0, effectiveDataLength)) : 1);
 
   return (
     <div className="plate-heatmap-container">

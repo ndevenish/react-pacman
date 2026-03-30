@@ -190,6 +190,25 @@ export function PlateHeatmap({
     const canvas = canvasRef.current;
     if (!canvas) return;
 
+    // Register our wheel handler FIRST — d3-zoom calls stopImmediatePropagation()
+    // on wheel events, so anything registered after it will never fire.
+    // We always preventDefault() to block page scroll.
+    // When already at minimum zoom and scrolling out, we also stopImmediatePropagation()
+    // to prevent d3-zoom from swallowing the event, and animate back to centre instead.
+    const stopScroll = (e: WheelEvent) => {
+      e.preventDefault();
+      const t = transformRef.current;
+      if (t.k <= 1 && e.deltaY > 0 && zoomBehaviorRef.current) {
+        e.stopImmediatePropagation();
+        const { x: ox, y: oy } = offsetRef.current;
+        select(canvas)
+          .transition()
+          .duration(300)
+          .call(zoomBehaviorRef.current.transform, zoomIdentity.translate(ox, oy));
+      }
+    };
+    canvas.addEventListener('wheel', stopScroll, { passive: false });
+
     const zoomBehavior = zoom<HTMLCanvasElement, unknown>()
       .scaleExtent([1, 10])
       .on('zoom', (event) => {
@@ -202,21 +221,6 @@ export function PlateHeatmap({
     select(canvas)
       .call(zoomBehavior)
       .on('dblclick.zoom', null); // Disable double-click zoom
-
-    // Prevent page scroll. When already at minimum zoom and scrolling out,
-    // animate back to the centred default instead.
-    const stopScroll = (e: WheelEvent) => {
-      e.preventDefault();
-      const t = transformRef.current;
-      if (t.k <= 1 && e.deltaY > 0 && zoomBehaviorRef.current) {
-        const { x: ox, y: oy } = offsetRef.current;
-        select(canvas)
-          .transition()
-          .duration(300)
-          .call(zoomBehaviorRef.current.transform, zoomIdentity.translate(ox, oy));
-      }
-    };
-    canvas.addEventListener('wheel', stopScroll, { passive: false });
 
     return () => {
       select(canvas).on('.zoom', null);

@@ -6,7 +6,7 @@ import 'd3-transition';
 import './PlateHeatmap.css';
 
 export interface PlateHeatmapProps {
-  data: number[];
+  data: number[] | Float32Array;
   dataLength?: number; // How many items in data to render (for streaming)
   blockRows?: number;
   blockCols?: number;

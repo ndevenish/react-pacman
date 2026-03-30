@@ -92,7 +92,7 @@
   width: 28px;
   height: 28px;
   padding: 0;
-  font-size: 18px;
+  font-size: 24px;
   background: transparent;
   color: inherit;
   border: 1px solid transparent;
@@ -103,11 +103,13 @@
   justify-content: center;
   line-height: 1;
   margin-top: auto;
+  opacity: 0.4;
 }
 
 .zoom-controls .settings-button:hover {
   background: rgba(128, 128, 128, 0.3);
   border-color: rgba(128, 128, 128, 0.3);
+  opacity: 1;
 }
 
 .scale-toggle {

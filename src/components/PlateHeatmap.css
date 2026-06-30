@@ -87,12 +87,13 @@
   border-radius: 3px;
 }
 
-/* Higher specificity than .zoom-controls button to override its background/border */
+/* Higher specificity than .zoom-controls button to override its background/border.
+   Save + settings are borderless and sit at the bottom, separate from the zoom group. */
+.zoom-controls .save-button,
 .zoom-controls .settings-button {
   width: 28px;
   height: 28px;
   padding: 0;
-  font-size: 24px;
   background: transparent;
   color: inherit;
   border: 1px solid transparent;
@@ -102,10 +103,20 @@
   align-items: center;
   justify-content: center;
   line-height: 1;
-  margin-top: auto;
   opacity: 0.4;
 }
 
+.zoom-controls .settings-button {
+  font-size: 24px;
+}
+
+/* margin-top:auto pushes the save+cog pair to the bottom of the column */
+.zoom-controls .save-button {
+  font-size: 18px;
+  margin-top: auto;
+}
+
+.zoom-controls .save-button:hover,
 .zoom-controls .settings-button:hover {
   background: rgba(128, 128, 128, 0.3);
   border-color: rgba(128, 128, 128, 0.3);

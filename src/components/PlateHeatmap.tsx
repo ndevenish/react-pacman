@@ -19,6 +19,12 @@ export interface PlateHeatmapProps {
   minValue?: number;
   maxValue?: number;
   onSettingsClick?: (e: React.MouseEvent<HTMLButtonElement>) => void;
+  /** Filename for the "save image" button. */
+  exportFileName?: string;
+  /** Pixels per well in the saved image. Guarantees >= 1 px/well. Default 8. */
+  exportWellPx?: number;
+  /** Colour for the colour-bar numeric labels in the saved image. */
+  exportLabelColor?: string;
 }
 
 function valueToColor(value: number, min: number, max: number, logScale: boolean): [number, number, number] {
@@ -53,6 +59,15 @@ function valueToColor(value: number, min: number, max: number, logScale: boolean
     Math.round((g + m) * 255),
     Math.round((b + m) * 255),
   ];
+}
+
+// Compact numeric label for the exported colour bar.
+function formatLegendValue(v: number): string {
+  if (!Number.isFinite(v)) return String(v);
+  const a = Math.abs(v);
+  if (a !== 0 && (a >= 100000 || a < 0.001)) return v.toExponential(2);
+  if (Number.isInteger(v)) return v.toLocaleString();
+  return (Math.round(v * 100) / 100).toLocaleString();
 }
 
 function blockIndexToPosition(index: number, blockRows: number): { row: number; col: number } {
@@ -106,6 +121,96 @@ function buildBlockWellMap(
   return map;
 }
 
+interface PlateGeometry {
+  activeBlockSet: Set<number>;
+  blockWellMaps: Map<number, Map<string, number>>;
+  blockRows: number;
+  wellsPerBlockRow: number;
+  wellsPerBlockCol: number;
+  cellWidth: number;
+  cellHeight: number;
+  blockPixelWidth: number;
+  blockPixelHeight: number;
+  gapWidth: number;
+  gapHeight: number;
+}
+
+interface DrawPlateOptions {
+  width: number;
+  height: number;
+  transform: { k: number; x: number; y: number };
+  data: number[] | Float32Array;
+  dataLength: number;
+  min: number;
+  max: number;
+  logScale: boolean;
+  gapColor: string;
+  blockBackgroundColor: string;
+  geom: PlateGeometry;
+}
+
+// Pure draw routine shared by the live canvas and the image-export canvas.
+// Defined at module scope so it is never recreated and never lands in a
+// dependency array — calling it is free, it does not affect redraw frequency.
+function drawPlate(ctx: CanvasRenderingContext2D, opts: DrawPlateOptions): void {
+  const {
+    width, height, transform, data, dataLength, min, max, logScale,
+    gapColor, blockBackgroundColor, geom,
+  } = opts;
+  const {
+    activeBlockSet, blockWellMaps, blockRows, wellsPerBlockRow, wellsPerBlockCol,
+    cellWidth, cellHeight, blockPixelWidth, blockPixelHeight, gapWidth, gapHeight,
+  } = geom;
+
+  // Clear canvas with gap color
+  ctx.setTransform(1, 0, 0, 1, 0, 0);
+  ctx.fillStyle = gapColor;
+  ctx.fillRect(0, 0, width, height);
+
+  // Apply d3 transform
+  ctx.setTransform(transform.k, 0, 0, transform.k, transform.x, transform.y);
+
+  // Draw block backgrounds and wells for active blocks
+  for (const blockIndex of activeBlockSet) {
+    const { row: blockRow, col: blockCol } = blockIndexToPosition(blockIndex, blockRows);
+    const wellMap = blockWellMaps.get(blockIndex);
+    if (!wellMap) continue;
+
+    const blockOffsetX = blockCol * (blockPixelWidth + gapWidth);
+    const blockOffsetY = blockRow * (blockPixelHeight + gapHeight);
+
+    // Draw block background
+    ctx.fillStyle = blockBackgroundColor;
+    ctx.fillRect(blockOffsetX, blockOffsetY, blockPixelWidth, blockPixelHeight);
+
+    // Draw block border
+    ctx.strokeStyle = 'rgba(128, 128, 128, 0.4)';
+    ctx.lineWidth = 1 / transform.k;
+    ctx.strokeRect(blockOffsetX, blockOffsetY, blockPixelWidth, blockPixelHeight);
+
+    // Draw wells that have data
+    for (let wellRow = 0; wellRow < wellsPerBlockRow; wellRow++) {
+      for (let wellCol = 0; wellCol < wellsPerBlockCol; wellCol++) {
+        const dataIndex = wellMap.get(`${wellRow},${wellCol}`);
+        if (dataIndex === undefined || dataIndex >= dataLength) continue;
+
+        const value = data[dataIndex];
+        const [r, g, b] = valueToColor(value, min, max, logScale);
+
+        ctx.fillStyle = `rgb(${r},${g},${b})`;
+        ctx.fillRect(
+          blockOffsetX + wellCol * cellWidth,
+          blockOffsetY + wellRow * cellHeight,
+          cellWidth,
+          cellHeight
+        );
+      }
+    }
+  }
+
+  ctx.setTransform(1, 0, 0, 1, 0, 0);
+}
+
 export function PlateHeatmap({
   data,
   dataLength,
@@ -120,6 +225,9 @@ export function PlateHeatmap({
   minValue,
   maxValue,
   onSettingsClick,
+  exportFileName = 'plate-heatmap.png',
+  exportWellPx = 8,
+  exportLabelColor = '#888888',
 }: PlateHeatmapProps) {
   // Use dataLength if provided, otherwise use data.length
   const effectiveDataLength = dataLength ?? data.length;
@@ -265,56 +373,16 @@ export function PlateHeatmap({
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
 
-    const min = minVal;
-    const max = maxVal;
-
-    // Clear canvas with gap color
-    ctx.setTransform(1, 0, 0, 1, 0, 0);
-    ctx.fillStyle = gapColor;
-    ctx.fillRect(0, 0, width, height);
-
-    // Apply d3 transform
-    ctx.setTransform(transform.k, 0, 0, transform.k, transform.x, transform.y);
-
-    // Draw block backgrounds and wells for active blocks
-    for (const blockIndex of activeBlockSet) {
-      const { row: blockRow, col: blockCol } = blockIndexToPosition(blockIndex, blockRows);
-      const wellMap = blockWellMaps.get(blockIndex);
-      if (!wellMap) continue;
-
-      const blockOffsetX = blockCol * (blockPixelWidth + gapWidth);
-      const blockOffsetY = blockRow * (blockPixelHeight + gapHeight);
-
-      // Draw block background
-      ctx.fillStyle = blockBackgroundColor;
-      ctx.fillRect(blockOffsetX, blockOffsetY, blockPixelWidth, blockPixelHeight);
-
-      // Draw block border
-      ctx.strokeStyle = 'rgba(128, 128, 128, 0.4)';
-      ctx.lineWidth = 1 / transform.k;
-      ctx.strokeRect(blockOffsetX, blockOffsetY, blockPixelWidth, blockPixelHeight);
-
-      // Draw wells that have data
-      for (let wellRow = 0; wellRow < wellsPerBlockRow; wellRow++) {
-        for (let wellCol = 0; wellCol < wellsPerBlockCol; wellCol++) {
-          const dataIndex = wellMap.get(`${wellRow},${wellCol}`);
-          if (dataIndex === undefined || dataIndex >= effectiveDataLength) continue;
-
-          const value = data[dataIndex];
-          const [r, g, b] = valueToColor(value, min, max, logScale);
-
-          ctx.fillStyle = `rgb(${r},${g},${b})`;
-          ctx.fillRect(
-            blockOffsetX + wellCol * cellWidth,
-            blockOffsetY + wellRow * cellHeight,
-            cellWidth,
-            cellHeight
-          );
-        }
-      }
-    }
-
-    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    drawPlate(ctx, {
+      width, height, transform,
+      data, dataLength: effectiveDataLength,
+      min: minVal, max: maxVal, logScale,
+      gapColor, blockBackgroundColor,
+      geom: {
+        activeBlockSet, blockWellMaps, blockRows, wellsPerBlockRow, wellsPerBlockCol,
+        cellWidth, cellHeight, blockPixelWidth, blockPixelHeight, gapWidth, gapHeight,
+      },
+    });
   }, [data, effectiveDataLength, width, height, activeBlockSet, blockWellMaps, blockRows, wellsPerBlockRow, wellsPerBlockCol, cellWidth, cellHeight, blockPixelWidth, blockPixelHeight, gapWidth, gapHeight, transform, blockBackgroundColor, gapColor, minVal, maxVal, logScale]);
 
   const handleMouseMove = useCallback((e: React.MouseEvent<HTMLCanvasElement>) => {
@@ -418,6 +486,105 @@ export function PlateHeatmap({
       .call(zoomBehaviorRef.current.scaleBy, 0.7);
   }, []);
 
+  // Save the full plate as a PNG, rendered to an offscreen canvas at a fixed
+  // integer scale so every well is guaranteed at least `exportWellPx` pixels.
+  // This is a one-off, off the live render path: identity transform, full plate,
+  // independent of the current on-screen zoom/pan. The area outside the plate and
+  // the colour-bar margin are left transparent.
+  const handleSave = useCallback(() => {
+    const wellPx = Math.max(1, Math.round(exportWellPx));
+    // Integer block geometry => crisp, pixel-aligned wells.
+    const exportBlockPixelWidth = wellsPerBlockCol * wellPx;
+    const exportBlockPixelHeight = wellsPerBlockRow * wellPx;
+    const exportGapWidth = Math.round(blockGapWells * wellPx);
+    const exportGapHeight = Math.round(blockGapWells * wellPx);
+    const plateWidth = blockCols * exportBlockPixelWidth + (blockCols - 1) * exportGapWidth;
+    const plateHeight = blockRows * exportBlockPixelHeight + (blockRows - 1) * exportGapHeight;
+
+    const off = document.createElement('canvas');
+    const ctx = off.getContext('2d');
+    if (!ctx) return;
+
+    // Colour-bar legend geometry — measure labels before sizing the canvas.
+    const fontSize = Math.max(11, Math.round(plateHeight * 0.022));
+    const pad = Math.round(fontSize * 0.9);
+    const labelGap = Math.round(fontSize * 0.4);
+    const barWidth = Math.max(10, Math.round(plateHeight * 0.02));
+    ctx.font = `${fontSize}px sans-serif`;
+    const maxLabel = formatLegendValue(maxVal);
+    const minLabel = formatLegendValue(minVal);
+    const labelWidth = Math.max(ctx.measureText(maxLabel).width, ctx.measureText(minLabel).width);
+    const legendContentWidth = Math.max(barWidth, labelWidth);
+    const legendWidth = pad + legendContentWidth + pad;
+
+    // Resizing the canvas resets the context (and clears it to transparent).
+    off.width = plateWidth + legendWidth;
+    off.height = plateHeight;
+
+    // Plate fills only its own rectangle; the legend margin stays transparent.
+    drawPlate(ctx, {
+      width: plateWidth,
+      height: plateHeight,
+      transform: { k: 1, x: 0, y: 0 },
+      data,
+      dataLength: effectiveDataLength,
+      min: minVal,
+      max: maxVal,
+      logScale,
+      gapColor,
+      blockBackgroundColor,
+      geom: {
+        activeBlockSet,
+        blockWellMaps,
+        blockRows,
+        wellsPerBlockRow,
+        wellsPerBlockCol,
+        cellWidth: wellPx,
+        cellHeight: wellPx,
+        blockPixelWidth: exportBlockPixelWidth,
+        blockPixelHeight: exportBlockPixelHeight,
+        gapWidth: exportGapWidth,
+        gapHeight: exportGapHeight,
+      },
+    });
+
+    // Colour scale: red (high) at top -> blue (low) at bottom, matching valueToColor.
+    const centerX = plateWidth + pad + legendContentWidth / 2;
+    const barX = centerX - barWidth / 2;
+    const barTop = pad + fontSize + labelGap;
+    const barHeight = Math.max(1, plateHeight - barTop - labelGap - fontSize - pad);
+
+    const grad = ctx.createLinearGradient(0, barTop, 0, barTop + barHeight);
+    grad.addColorStop(0, 'hsl(0, 80%, 50%)');
+    grad.addColorStop(0.25, 'hsl(60, 80%, 50%)');
+    grad.addColorStop(0.5, 'hsl(120, 80%, 50%)');
+    grad.addColorStop(0.75, 'hsl(180, 80%, 50%)');
+    grad.addColorStop(1, 'hsl(240, 80%, 50%)');
+    ctx.fillStyle = grad;
+    ctx.fillRect(barX, barTop, barWidth, barHeight);
+    ctx.strokeStyle = 'rgba(128, 128, 128, 0.4)';
+    ctx.lineWidth = 1;
+    ctx.strokeRect(barX, barTop, barWidth, barHeight);
+
+    ctx.fillStyle = exportLabelColor;
+    ctx.font = `${fontSize}px sans-serif`;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'bottom';
+    ctx.fillText(maxLabel, centerX, barTop - labelGap);
+    ctx.textBaseline = 'top';
+    ctx.fillText(minLabel, centerX, barTop + barHeight + labelGap);
+
+    off.toBlob((blob) => {
+      if (!blob) return;
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = exportFileName;
+      a.click();
+      URL.revokeObjectURL(url);
+    }, 'image/png');
+  }, [exportWellPx, exportFileName, exportLabelColor, blockCols, blockRows, blockGapWells, wellsPerBlockRow, wellsPerBlockCol, data, effectiveDataLength, minVal, maxVal, logScale, gapColor, blockBackgroundColor, activeBlockSet, blockWellMaps]);
+
   return (
     <div className="plate-heatmap-container">
       <div className="zoom-controls">
@@ -425,6 +592,7 @@ export function PlateHeatmap({
         <button onClick={handleZoomIn}>+</button>
         <button onClick={handleZoomOut}>−</button>
         <button onClick={handleReset}>⟳</button>
+        <button className="save-button" onClick={handleSave} title="Save image">⤓</button>
         {onSettingsClick && (
           <button className="settings-button" onClick={onSettingsClick}>⚙</button>
         )}

@@ -110,10 +110,15 @@
   font-size: 24px;
 }
 
-/* margin-top:auto pushes the save+cog pair to the bottom of the column */
+/* margin-top:auto pushes the cog+save pair to the bottom of the column. The
+   leading button of the pair carries it; when settings is present it leads and
+   the following save resets its margin so the two stay grouped. */
+.zoom-controls .settings-button,
 .zoom-controls .save-button {
-  font-size: 18px;
   margin-top: auto;
+}
+.zoom-controls .settings-button + .save-button {
+  margin-top: 0;
 }
 
 .zoom-controls .save-button:hover,
